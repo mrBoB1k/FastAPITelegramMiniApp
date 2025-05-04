@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -21,7 +21,7 @@ async def say_hello(name: str):
     return {"message": user}
 
 @app.websocket("/ws/{id_interactive}")
-async def websocket_endpoint(websocket: WebSocket, id_interactive: int, telegram_id: int):
+async def websocket_endpoint(websocket: WebSocket, id_interactive: int, telegram_id: int, active_connections=None):
     await websocket.accept()
     active_connections.add(websocket)
     try:
