@@ -19,3 +19,14 @@ async def root():
 async def say_hello(name: str):
     user = User(telegram_id=123, username=name, first_name=name)
     return {"message": user}
+
+@app.websocket("/ws/{id_interactive}")
+async def websocket_endpoint(websocket: WebSocket, id_interactive: int, telegram_id: int):
+    await websocket.accept()
+    active_connections.add(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Echo: {data}")
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
