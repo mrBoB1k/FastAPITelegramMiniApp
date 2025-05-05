@@ -1,9 +1,8 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-
+import asyncio
+from datetime import datetime
 app = FastAPI()
 
 html = """
@@ -47,13 +46,16 @@ html = """
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self.time_task: asyncio.Task | None = None
+        self.time_task_running: bool = False
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
@@ -61,6 +63,23 @@ class ConnectionManager:
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
+
+    async def start_time_broadcast(self):
+        self.time_task_running = True
+
+        async def send_time():
+            while self.time_task_running:
+                current_time = datetime.now().strftime("%H:%M:%S")
+                await self.broadcast(f"[TIME] {current_time}")
+                await asyncio.sleep(1)
+
+        self.time_task = asyncio.create_task(send_time())
+
+    def stop_time_broadcast(self):
+        self.time_task_running = False
+        if self.time_task:
+            self.time_task.cancel()
+            self.time_task = None
 
 
 manager = ConnectionManager()
@@ -77,8 +96,21 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.send_personal_message(f"You wrote: {data}", websocket)
-            await manager.broadcast(f"Client #{client_id} says: {data}")
+            if data.strip() == "/time start":
+                if not manager.time_task_running:
+                    await manager.broadcast(f"Client #{client_id} started the clock.")
+                    await manager.start_time_broadcast()
+                else:
+                    await manager.send_personal_message("Clock is already running.", websocket)
+            elif data.strip() == "/time stop":
+                if manager.time_task_running:
+                    manager.stop_time_broadcast()
+                    await manager.broadcast(f"Client #{client_id} stopped the clock.")
+                else:
+                    await manager.send_personal_message("Clock is not running.", websocket)
+            else:
+                await manager.send_personal_message(f"You wrote: {data}", websocket)
+                await manager.broadcast(f"Client #{client_id} says: {data}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast(f"Client #{client_id} left the chat")
