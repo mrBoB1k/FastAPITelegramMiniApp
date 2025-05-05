@@ -10,6 +10,18 @@ from datetime import datetime
 
 app = FastAPI()
 
+origins = [
+    "http://217.114.14.123:3000"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],  # Или ['*'] для всех / origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 html = """
 <!DOCTYPE html>
 <html>
@@ -143,16 +155,3 @@ async def websocket_endpoint(websocket: WebSocket, id_interactive: int, telegram
     while True:
         data = await websocket.receive_text()
         await websocket.send_text(f"Message text was: {data}")
-
-
-origins = [
-    "http://217.114.14.123:3000"
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
