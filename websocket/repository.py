@@ -102,7 +102,7 @@ class Repository:
         async with new_session() as session:
             result = await session.execute(
                 select(Answer.id)
-                .where(Answer.question_id == question_id and Answer.is_correct)
+                .where(Answer.question_id == question_id, Answer.is_correct == True)
             )
 
             answer_id = result.scalar()
@@ -124,23 +124,22 @@ class Repository:
     async def put_user_answers(cls, data: PutUserAnswers):
         async with new_session() as session:
             # answer_dict = data.model_dump()
-
-            fllag_answer = await session.execute(
+            flag_answer = await session.execute(
                 select(UserAnswer)
-                .where(UserAnswer.participant_id == data.participant_id and UserAnswer.question_id == data.question_id)
+                .where(UserAnswer.participant_id == data.participant_id, UserAnswer.question_id == data.question_id)
             )
 
-            fllag_answer = fllag_answer.scalar_one_or_none()
-            if fllag_answer is None:
+            flag_answer = flag_answer.scalar_one_or_none()
+            if flag_answer is None:
                 answer_dict = data.model_dump()
                 user_answer = UserAnswer(**answer_dict)
                 session.add(user_answer)
                 await session.flush()
                 await session.commit()
             else:
-                fllag_answer.answer_id = data.answer_id
+                flag_answer.answer_id = data.answer_id
                 await session.commit()
-                await session.refresh(fllag_answer)
+                await session.refresh(flag_answer)
 
     @classmethod
     async def get_percentages(cls, question_id: int) -> list[Percentage]:
@@ -180,48 +179,52 @@ class Repository:
     @classmethod
     async def get_winners(cls, interactive_id: int) -> list[Winner]:
         async with new_session() as session:
-            subquery = (
+            # Подзапрос для подсчета правильных ответов каждого участника
+            correct_answers_subq = (
                 select(
-                    QuizParticipant.id.label("participant_id"),
-                    QuizParticipant.user_id.label("user_id")
+                    UserAnswer.participant_id,
+                    func.count().label('correct_count')
                 )
-                .where(QuizParticipant.interactive_id == interactive_id)
-                .subquery()
-            )
-
-            # Подсчёт правильных ответов по user_id
-            correct_answers = (
-                select(
-                    subquery.c.user_id,
-                    func.count(UserAnswer.id).label("correct_count")
-                )
-                .join(UserAnswer, UserAnswer.participant_id == subquery.c.participant_id)
-                .join(Answer, Answer.id == UserAnswer.answer_id)
+                .join(Answer, UserAnswer.answer_id == Answer.id)
                 .where(Answer.is_correct == True)
-                .group_by(subquery.c.user_id)
-                .order_by(desc("correct_count"))
-                .limit(3)
+                .group_by(UserAnswer.participant_id)
                 .subquery()
             )
 
-            # Получаем username + количество правильных ответов
-            result = await session.execute(
+            # Основной запрос для получения участников с их правильными ответами и username
+            winners_query = (
                 select(
+                    QuizParticipant.user_id,
                     User.username,
-                    correct_answers.c.correct_count
-                ).join(User, User.id == correct_answers.c.user_id)
-                .order_by(desc(correct_answers.c.correct_count))
+                    correct_answers_subq.c.correct_count
+                )
+                .join(correct_answers_subq,
+                      QuizParticipant.id == correct_answers_subq.c.participant_id)
+                .join(User, QuizParticipant.user_id == User.id)
+                .where(QuizParticipant.interactive_id == interactive_id)
+                .order_by(correct_answers_subq.c.correct_count.desc())
+                .limit(3)
             )
-            rows = result.fetchall()
 
-            winners = [Winner(position=i + 1, username=row) for i, row in enumerate(rows)]
+            result = await session.execute(winners_query)
+            winners_data = result.all()
+
+            # Формируем список победителей с позициями
+            winners = []
+            for position, (user_id, username, correct_count) in enumerate(winners_data, start=1):
+                winners.append(Winner(
+                    position=position,
+                    username=username
+                ))
+
             return winners
 
     @classmethod
     async def get_participant_count(cls, interactive_id: int) -> int:
         async with new_session() as session:
-            stmt = select(func.count()).where(
-                QuizParticipant.interactive_id == interactive_id
+            result = await session.execute(
+                select(func.count().label('correct_count'))
+                .where(QuizParticipant.interactive_id == interactive_id)
             )
-            result = await session.execute(stmt)
-            return result.scalar_one()
+            count = result.scalar()
+            return count

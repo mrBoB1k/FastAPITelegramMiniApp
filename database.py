@@ -6,7 +6,7 @@ from models import Base
 DATABASE_FILE = "./database.db"
 DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_FILE}"
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=False)
 new_session = async_sessionmaker(engine, expire_on_commit=False)
 
 

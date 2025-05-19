@@ -41,8 +41,8 @@ class InteractiveSession:
         self.second_step: int = 1
 
         self.question_index: int = 0  # текущий вопрос
-        self.questions = questions
-        self.current_question = None
+        self.questions: List[Question] = questions
+        self.current_question: Question | None = questions[0]
 
         self.get_participants_count = get_participants_count
         self.broadcast_callback = broadcast_callback
@@ -55,6 +55,14 @@ class InteractiveSession:
             return self.current_question.id
         return -1
 
+    async def _change_question(self):
+        if self.question_index >= len(self.questions) - 1:
+            await self._end_interactive_all()
+            return
+        self.question_index += 1
+        self.current_question = self.questions[self.question_index]
+        return
+
     async def change_status(self, interactive_status: InteractiveStatus):
         if interactive_status == InteractiveStatus.pause:
             await self._toggle_pause()
@@ -66,7 +74,6 @@ class InteractiveSession:
     async def _toggle_pause(self):
         if self.stage == Stage.WAITING or self.stage == Stage.END:
             return
-
         self.paused = not self.paused
         if self.paused:
             self.second_step = 0
@@ -85,7 +92,7 @@ class InteractiveSession:
         self.stage = new_stage
         if self.time_task is not None:
             self.time_task.cancel()
-            self.time_task = None
+        self.time_task = None
 
         if new_stage == Stage.COUNTDOWN:
             self.timer_duration = self.countdown_duration
@@ -95,31 +102,31 @@ class InteractiveSession:
             # await self._wait_for_timer()
             # await self._change_stage(Stage.QUESTION)
 
-        elif new_stage == Stage.QUESTION:
+        if new_stage == Stage.QUESTION:
             if self.question_index >= len(self.questions):
-                await self._change_stage(Stage.END)
+                await self._end_interactive_all()
                 return
             self.timer_duration = self.answer_duration
             self.remaining_time = self.answer_duration
-            self.current_question = self.questions[self.question_index]
             self.time_task = asyncio.create_task(self.question_timer())
-            # await self._start_timer(self.timer_duration)
-            # await self._wait_for_timer()
-            # await self._change_stage(Stage.DISCUSSION)
 
-        elif new_stage == Stage.DISCUSSION:
-            self.timer_duration = self.countdown_duration
-            self.remaining_time = self.countdown_duration
+        if new_stage == Stage.DISCUSSION:
+            self.timer_duration = self.discussion_duration
+            self.remaining_time = self.discussion_duration
             self.time_task = asyncio.create_task(self.discussion_timer())
 
-        elif new_stage == Stage.END:
-            winners = await Repository.get_winners(self.interactive_id) # тут проблема
-            participants_total = await Repository.get_participant_count(self.interactive_id)
-            data = DataStageEnd(title=self.title, participants_total=participants_total, winners=winners)
-            await self.broadcast_callback(self.interactive_id, StageEnd(stage=self.stage, data=data).model_dump())
-            # Помечаем интерактив как завершённый в БД
-            await asyncio.sleep(1)
-            await Repository.mark_interactive_conducted(self.interactive_id)
+        if new_stage == Stage.END:
+            await self._end_interactive_all()
+
+    async def _end_interactive_all(self):
+        self.stage = Stage.END
+        participants_total = await Repository.get_participant_count(self.interactive_id)
+        winners = await Repository.get_winners(self.interactive_id)  # тут проблема
+        data = DataStageEnd(title=self.title, participants_total=participants_total, winners=winners)
+        await self.broadcast_callback(self.interactive_id, StageEnd(stage=self.stage, data=data).model_dump())
+        # Помечаем интерактив как завершённый в БД
+        await asyncio.sleep(1)
+        await Repository.mark_interactive_conducted(self.interactive_id)
 
     async def countdonw_timer(self):
         while self.remaining_time >= 0:
@@ -139,7 +146,6 @@ class InteractiveSession:
             await self.broadcast_callback(self.interactive_id, result.model_dump())
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
-
         await self._change_stage(Stage.DISCUSSION)
 
     async def discussion_timer(self):
@@ -155,7 +161,7 @@ class InteractiveSession:
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
 
-        self.question_index += 1
+        await self._change_question()
         await self._change_stage(Stage.QUESTION)
 
     async def waiting_timer(self):
