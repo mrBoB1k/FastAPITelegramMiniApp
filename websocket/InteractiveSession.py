@@ -120,6 +120,9 @@ class InteractiveSession:
 
     async def _end_interactive_all(self):
         self.stage = Stage.END
+        if self.time_task is not None:
+            self.time_task.cancel()
+        self.time_task = None
         participants_total = await Repository.get_participant_count(self.interactive_id)
         winners = await Repository.get_winners(self.interactive_id)  # тут проблема
         data = DataStageEnd(title=self.title, participants_total=participants_total, winners=winners)
