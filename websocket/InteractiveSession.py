@@ -58,10 +58,10 @@ class InteractiveSession:
     async def _change_question(self):
         if self.question_index >= len(self.questions) - 1:
             await self._end_interactive()
+        else:
+            self.question_index += 1
+            self.current_question = self.questions[self.question_index]
             return
-        self.question_index += 1
-        self.current_question = self.questions[self.question_index]
-        return
 
     async def change_status(self, interactive_status: InteractiveStatus):
         if interactive_status == InteractiveStatus.pause:
@@ -85,17 +85,10 @@ class InteractiveSession:
             return
         self.waiting_timer_flag = False
 
-    async def _end_interactive(self):
-        await self._change_stage(Stage.END)
-
     async def _change_stage(self, new_stage: Stage):
         self.stage = new_stage
         if self.time_task is not None:
             self.time_task.cancel()
-            try:
-                await self.time_task
-            except asyncio.CancelledError:
-                pass
         self.time_task = None
 
         if new_stage == Stage.COUNTDOWN:
@@ -106,23 +99,20 @@ class InteractiveSession:
             # await self._wait_for_timer()
             # await self._change_stage(Stage.QUESTION)
 
-        if new_stage == Stage.QUESTION:
+        elif new_stage == Stage.QUESTION:
             if self.question_index >= len(self.questions):
                 await self._end_interactive()
-                return
-            self.timer_duration = self.answer_duration
-            self.remaining_time = self.answer_duration
-            self.time_task = asyncio.create_task(self.question_timer())
+            else:
+                self.timer_duration = self.answer_duration
+                self.remaining_time = self.answer_duration
+                self.time_task = asyncio.create_task(self.question_timer())
 
-        if new_stage == Stage.DISCUSSION:
+        elif new_stage == Stage.DISCUSSION:
             self.timer_duration = self.discussion_duration
             self.remaining_time = self.discussion_duration
             self.time_task = asyncio.create_task(self.discussion_timer())
 
-        if new_stage == Stage.END:
-            await self._end_interactive_all()
-
-    async def _end_interactive_all(self):
+    async def _end_interactive(self):
         self.stage = Stage.END
         if self.time_task is not None:
             self.time_task.cancel()
@@ -136,62 +126,52 @@ class InteractiveSession:
         await Repository.mark_interactive_conducted(self.interactive_id)
 
     async def countdonw_timer(self):
-        try:
-            while self.remaining_time >= 0:
-                await self.broadcast_callback(self.interactive_id, StageCountdown(stage=self.stage, data=DataStageCountdown(
-                    timer=self.remaining_time)).model_dump())
-                await asyncio.sleep(1)
-                self.remaining_time -= self.second_step
-            await self._change_stage(Stage.QUESTION)
-        except asyncio.CancelledError:
-            return
+        while self.remaining_time >= 0:
+            await self.broadcast_callback(self.interactive_id, StageCountdown(stage=self.stage, data=DataStageCountdown(
+                timer=self.remaining_time)).model_dump())
+            await asyncio.sleep(1)
+            self.remaining_time -= self.second_step
+        await self._change_stage(Stage.QUESTION)
 
     async def question_timer(self):
-        try:
-            while self.remaining_time >= 0:
-                answer = await Repository.get_question_answers(self.current_question.id)
-                data = DataStageQuestion(questions_count=len(self.questions), timer=self.remaining_time,
-                                         timer_duration=self.timer_duration, title=self.title, code=self.code,
-                                         question=self.current_question, answers=answer)
-                result = StageQuestion(stage=self.stage, data=data)
-                await self.broadcast_callback(self.interactive_id, result.model_dump())
-                await asyncio.sleep(1)
-                self.remaining_time -= self.second_step
-            await self._change_stage(Stage.DISCUSSION)
-        except asyncio.CancelledError:
-            return
+        while self.remaining_time >= 0:
+            answer = await Repository.get_question_answers(self.current_question.id)
+            data = DataStageQuestion(questions_count=len(self.questions), timer=self.remaining_time,
+                                     timer_duration=self.timer_duration, title=self.title, code=self.code,
+                                     question=self.current_question, answers=answer)
+            result = StageQuestion(stage=self.stage, data=data)
+            await self.broadcast_callback(self.interactive_id, result.model_dump())
+            await asyncio.sleep(1)
+            self.remaining_time -= self.second_step
+        await self._change_stage(Stage.DISCUSSION)
+
 
     async def discussion_timer(self):
-        try:
-            while self.remaining_time >= 0:
-                percentages = await  Repository.get_percentages(self.current_question.id)
-                id_correct_answer = await Repository.get_correct_answer(self.current_question.id)
-                data = DataStageDiscussion(questions_count=len(self.questions), timer=self.remaining_time,
-                                           timer_duration=self.timer_duration, title=self.title, code=self.code,
-                                           question=self.current_question, id_correct_answer=id_correct_answer,
-                                           percentages=percentages)
-                result = StageDiscussion(stage=self.stage, data=data)
-                await self.broadcast_callback(self.interactive_id, result.model_dump())
-                await asyncio.sleep(1)
-                self.remaining_time -= self.second_step
+        while self.remaining_time >= 0:
+            percentages = await  Repository.get_percentages(self.current_question.id)
+            id_correct_answer = await Repository.get_correct_answer(self.current_question.id)
+            data = DataStageDiscussion(questions_count=len(self.questions), timer=self.remaining_time,
+                                       timer_duration=self.timer_duration, title=self.title, code=self.code,
+                                       question=self.current_question, id_correct_answer=id_correct_answer,
+                                       percentages=percentages)
+            result = StageDiscussion(stage=self.stage, data=data)
+            await self.broadcast_callback(self.interactive_id, result.model_dump())
+            await asyncio.sleep(1)
+            self.remaining_time -= self.second_step
 
-            await self._change_question()
-            await self._change_stage(Stage.QUESTION)
-        except asyncio.CancelledError:
-            return
+        await self._change_question()
+        await self._change_stage(Stage.QUESTION)
 
     async def waiting_timer(self):
-        try:
-            while self.waiting_timer_flag:
-                await asyncio.sleep(1)
-                participants_count = await  self.get_participants_count(self.interactive_id)
-                data = DataStageWaiting(title=self.title, description=self.description, code=self.code,
-                                        participants_active=participants_count)
-                result = StageWaiting(stage=self.stage, data=data)
-                await self.broadcast_callback(self.interactive_id, result.model_dump())
-            await self._change_stage(Stage.COUNTDOWN)
-        except asyncio.CancelledError:
-            return
+        while self.waiting_timer_flag:
+            await asyncio.sleep(1)
+            participants_count = await  self.get_participants_count(self.interactive_id)
+            data = DataStageWaiting(title=self.title, description=self.description, code=self.code,
+                                    participants_active=participants_count)
+            result = StageWaiting(stage=self.stage, data=data)
+            await self.broadcast_callback(self.interactive_id, result.model_dump())
+        await self._change_stage(Stage.COUNTDOWN)
+
     #
     # async def _start_timer(self, duration: int):
     #     if self.timer_task and not self.timer_task.done():
