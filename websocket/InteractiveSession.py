@@ -57,7 +57,7 @@ class InteractiveSession:
 
     async def _change_question(self):
         if self.question_index >= len(self.questions) - 1:
-            await self._end_interactive_all()
+            await self._end_interactive()
             return
         self.question_index += 1
         self.current_question = self.questions[self.question_index]
@@ -108,7 +108,7 @@ class InteractiveSession:
 
         if new_stage == Stage.QUESTION:
             if self.question_index >= len(self.questions):
-                await self._end_interactive_all()
+                await self._end_interactive()
                 return
             self.timer_duration = self.answer_duration
             self.remaining_time = self.answer_duration
