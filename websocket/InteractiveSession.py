@@ -126,10 +126,6 @@ class InteractiveSession:
         self.stage = Stage.END
         if self.time_task is not None:
             self.time_task.cancel()
-            try:
-                await self.time_task
-            except asyncio.CancelledError:
-                pass
         self.time_task = None
         participants_total = await Repository.get_participant_count(self.interactive_id)
         winners = await Repository.get_winners(self.interactive_id)  # тут проблема
