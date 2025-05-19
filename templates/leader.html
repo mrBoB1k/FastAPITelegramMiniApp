@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leader</title>
+</head>
+<body>
+    <h1>Leader Interface</h1>
+    <input placeholder="interactive_id" id="interactive_id">
+    <input placeholder="telegram_id" id="telegram_id">
+    <input placeholder="key" id="key">
+    <button onclick="connect()">Подключиться</button>
+    <div id="controls" style="display:none;">
+        <button onclick="sendStatus('pause')">Pause</button>
+        <button onclick="sendStatus('going')">Going</button>
+        <button onclick="sendStatus('end')">End</button>
+    </div>
+    <ul id="messages"></ul>
+
+    <script>
+        let ws;
+
+        function connect() {
+            const interactive_id = document.getElementById("interactive_id").value;
+            const telegram_id = document.getElementById("telegram_id").value;
+            const key = document.getElementById("key").value;
+            const role = "leader";
+
+            ws = new WebSocket(`ws://localhost:8000/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
+            ws.onopen = () => {
+                document.getElementById("controls").style.display = "block";
+            };
+            ws.onmessage = (event) => {
+                const li = document.createElement("li");
+                li.textContent = event.data;
+                document.getElementById("messages").appendChild(li);
+            };
+        }
+
+        function sendStatus(status) {
+            const msg = JSON.stringify({ interactive_status: status });
+            ws.send(msg);
+        }
+    </script>
+</body>
+</html>

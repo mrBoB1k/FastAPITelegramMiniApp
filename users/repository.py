@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from database import new_session
-from schemas import UserRegister, UserRoleEnum, TelegramId
+from users.schemas import UserRegister, UserRoleEnum, TelegramId, UsersChangeRole, UsersBase
 from models import *
 from datetime import datetime
 
@@ -13,12 +13,12 @@ class Repository:
 
             user_dict["role"] = "participant"
 
-            task = User(**user_dict)
-            session.add(task)
+            user = User(**user_dict)
+            session.add(user)
 
             await session.flush()
             await session.commit()
-            return task.role
+            return user.role
 
     @classmethod
     async def get_role_by_telegram_id(cls, telegram_id: int) -> UserRoleEnum | None:
@@ -28,3 +28,17 @@ class Repository:
             )
             role = result.scalar_one_or_none()
             return role
+
+    @classmethod
+    async def change_role(cls, data: UsersChangeRole) -> UsersBase:
+        async with new_session() as session:
+            result = await session.execute(
+                select(User).where(User.telegram_id == data.telegram_id)
+            )
+            user = result.scalar_one_or_none()
+
+            user.role = data.role
+            await session.commit()
+            await session.refresh(user)
+
+            return user

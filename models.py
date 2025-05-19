@@ -39,7 +39,7 @@ class Interactive(AsyncAttrs, Base):
     location = Column(Text, nullable=True)
     responsible_full_name = Column(Text, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(TIMESTAMP, nullable=False)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     answer_duration = Column(Integer, nullable=False)
     discussion_duration = Column(Integer, nullable=False)
     countdown_duration = Column(Integer, nullable=False)
@@ -70,7 +70,7 @@ class QuizParticipant(AsyncAttrs, Base):
     id = Column(Integer, primary_key=True)
     interactive_id = Column(Integer, ForeignKey("interactives.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
-    joined_at = Column(TIMESTAMP, nullable=False)
+    joined_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
 
 
 class UserAnswer(AsyncAttrs, Base):
@@ -80,7 +80,7 @@ class UserAnswer(AsyncAttrs, Base):
     participant_id = Column(Integer, ForeignKey("quiz_participants.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
     answer_id = Column(Integer, ForeignKey("answers.id"))
-    answered_at = Column(TIMESTAMP, nullable=False)
+    answered_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
 
 
 class RoleChange(AsyncAttrs, Base):
@@ -91,4 +91,4 @@ class RoleChange(AsyncAttrs, Base):
     changed_by_id = Column(Integer, ForeignKey("users.id"))
     old_role = Column(Text, nullable=False)
     new_role = Column(Text, nullable=False)
-    changed_at = Column(TIMESTAMP, nullable=False)
+    changed_at = Column(TIMESTAMP, nullable=False, server_default=func.now())

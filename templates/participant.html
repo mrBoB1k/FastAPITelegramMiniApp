@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Participant</title>
+</head>
+<body>
+    <h1>Participant Interface</h1>
+    <input placeholder="interactive_id" id="interactive_id">
+    <input placeholder="telegram_id" id="telegram_id">
+    <input placeholder="key" id="key">
+    <button onclick="connect()">Подключиться</button>
+    <div id="controls" style="display:none;">
+        <input type="number" id="answer_input" placeholder="Введите число">
+        <button onclick="sendAnswer()">Отправить</button>
+    </div>
+    <ul id="messages"></ul>
+
+    <script>
+        let ws;
+
+        function connect() {
+            const interactive_id = document.getElementById("interactive_id").value;
+            const telegram_id = document.getElementById("telegram_id").value;
+            const key = document.getElementById("key").value;
+            const role = "participant";
+
+            ws = new WebSocket(`ws://localhost:8000/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
+            ws.onopen = () => {
+                document.getElementById("controls").style.display = "block";
+            };
+            ws.onmessage = (event) => {
+                const li = document.createElement("li");
+                li.textContent = event.data;
+                document.getElementById("messages").appendChild(li);
+            };
+        }
+
+        function sendAnswer() {
+            const answer = document.getElementById("answer_input").value;
+            const msg = JSON.stringify({ answer_id: answer });
+            ws.send(msg);
+        }
+    </script>
+</body>
+</html>

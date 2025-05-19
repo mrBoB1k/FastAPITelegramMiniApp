@@ -1,9 +1,13 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
 from contextlib import asynccontextmanager
 from database import init_db
-from router import router as user_router
+from users.router import router as user_router
+from websocket.router import router as websocket_router
+from interactivities.router import router as interactivity_router
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 
 async def verify_key(x_key: str):
@@ -32,7 +36,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/leader")
+async def get_leader(request: Request):
+    return templates.TemplateResponse("leader.html", {"request": request})
+
+@app.get("/participant")
+async def get_participant(request: Request):
+    return templates.TemplateResponse("participant.html", {"request": request})
+
 app.include_router(user_router)
+app.include_router(interactivity_router)
+app.include_router(websocket_router)
 
 # html = """
 # <!DOCTYPE html>
