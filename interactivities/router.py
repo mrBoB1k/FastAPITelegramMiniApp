@@ -50,6 +50,8 @@ async def get_me(
     telegram_id: Annotated[TelegramId, Depends()],
 ) -> MyInteractives:
     user_id = await Repository.get_user_id(telegram_id.telegram_id)
+    if user_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
     interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
 
