@@ -46,6 +46,8 @@ class ReceiveInteractive(BaseModel):
 class InteractiveId(BaseModel):
     interactive_id: int
 
+class InteractiveCode(BaseModel):
+    code: str
 
 class InteractiveCreate(Interactive):
     code: str

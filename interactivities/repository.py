@@ -1,8 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from database import new_session
 from models import *
 from datetime import datetime
-from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, InteractiveConducted
+from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, InteractiveConducted, \
+    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull
 import random
 import string
 from typing import Optional
@@ -22,12 +23,12 @@ class Repository:
             return UserIdAndRole(user_id=user_id, role=role)
 
     @classmethod
-    async def check_code_exists(cls, code: str) -> bool:
+    async def check_code_exists(cls, code: str) -> int:
         async with new_session() as session:
             result = await session.execute(
-                select(Interactive.id).where(Interactive.code == code)
+                select(Interactive.id).where(Interactive.code == code, Interactive.conducted == False)
             )
-            return result.scalar_one_or_none() is not None
+            return result.scalar_one_or_none()
 
     @classmethod
     async def generate_unique_code(cls, length: int = 6) -> str:
@@ -131,3 +132,125 @@ class Repository:
         if date_obj is None:
             return None
         return date_obj.strftime('%d.%m.%Y')
+
+    @classmethod
+    async def get_all_interactive_info(cls, user_id: int, interactive_id: int) -> InteractiveFull | None:
+        async with new_session() as session:
+            interactive = await session.execute(
+                select(Interactive)
+                .where(
+                    Interactive.id == interactive_id,
+                    Interactive.created_by_id == user_id
+                )
+            )
+            interactive = interactive.scalar_one_or_none()
+            if interactive is None:
+                return None
+
+            questions_result = await session.execute(
+                select(Question)
+                .where(Question.interactive_id == interactive_id)
+                .order_by(Question.position)
+            )
+            questions = questions_result.scalars().all()
+
+            questions_data = []
+            for question in questions:
+                answers_result = await session.execute(
+                    select(Answer)
+                    .where(Answer.question_id == question.id)
+                )
+                answers = answers_result.scalars().all()
+
+                answers_data = [
+                    AnswerFull(
+                        text=answer.text,
+                        is_answered=answer.is_correct
+                    )
+                    for answer in answers
+                ]
+
+                questions_data.append(
+                    QuestionFull(
+                        text=question.text,
+                        position=question.position,
+                        answers=answers_data
+                    )
+                )
+
+            return InteractiveFull(
+                title=interactive.title,
+                description=interactive.description,
+                target_audience=interactive.target_audience,
+                location=interactive.location,
+                responsible_full_name=interactive.responsible_full_name,
+                answer_duration=interactive.answer_duration,
+                discussion_duration=interactive.discussion_duration,
+                countdown_duration=interactive.countdown_duration,
+                questions=questions_data
+            )
+
+    @classmethod
+    async def get_interactive_conducted(cls, interactive_id: int, user_id: int) -> bool:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Interactive.conducted).where(Interactive.id == interactive_id,
+                                                    Interactive.created_by_id == user_id)
+            )
+            conducted = result.scalar_one_or_none()
+
+            return conducted
+
+    @classmethod
+    async def update_interactive(
+            cls,
+            interactive_id: int,
+            data: Interactive
+    ) -> InteractiveId:
+        async with new_session() as session:
+            # 1. Получаем интерактив
+            interactive = await session.get(Interactive, interactive_id)
+            if not interactive:
+                raise ValueError(f"Интерактив с ID {interactive_id} не найден")
+
+            # 2. Удаляем все существующие ответы и вопросы
+            # Сначала удаляем ответы (из-за foreign key constraint)
+            await session.execute(
+                delete(Answer)
+                .where(Answer.question_id.in_(
+                    select(Question.id)
+                    .where(Question.interactive_id == interactive_id)
+                ))
+            )
+
+            # Затем удаляем вопросы
+            await session.execute(
+                delete(Question)
+                .where(Question.interactive_id == interactive_id)
+            )
+
+            # 3. Обновляем основные данные интерактива
+            update_data = data.model_dump(exclude={"questions"})
+            for key, value in update_data.items():
+                setattr(interactive, key, value)
+
+            # 4. Создаем новые вопросы и ответы
+            for question_data in data.questions:
+                new_question = Question(
+                    interactive_id=interactive_id,
+                    text=question_data.text,
+                    position=question_data.position
+                )
+                session.add(new_question)
+                await session.flush()  # Получаем ID нового вопроса
+
+                for answer_data in question_data.answers:
+                    new_answer = Answer(
+                        question_id=new_question.id,
+                        text=answer_data.text,
+                        is_correct=answer_data.is_answered
+                    )
+                    session.add(new_answer)
+
+            await session.commit()
+            return InteractiveId(interactive_id=interactive_id)
