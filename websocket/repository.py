@@ -174,6 +174,7 @@ class Repository:
             interactive = await session.get(Interactive, interactive_id)
             if interactive:
                 interactive.conducted = True
+                interactive.date_completed = func.now()
                 await session.commit()
 
     @classmethod

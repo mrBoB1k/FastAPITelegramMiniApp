@@ -4,6 +4,8 @@ from typing import Optional
 import enum
 from users.schemas import UserRoleEnum
 
+class TelegramId(BaseModel):
+    telegram_id: int
 
 class UserIdAndRole(BaseModel):
     user_id: int
@@ -54,3 +56,15 @@ class QuestionCreate(BaseModel):
     text: str
     position: int
     interactive_id: int
+
+class InteractiveConducted(BaseModel):
+    title: str
+    question_count: int
+    target_audience: str | None = None
+    id: int
+    date_completed: str | None = None
+
+
+class MyInteractives(BaseModel):
+    interactives_list_conducted: list[InteractiveConducted]
+    interactives_list_not_conducted: list[InteractiveConducted]

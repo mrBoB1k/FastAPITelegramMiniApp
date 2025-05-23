@@ -44,6 +44,7 @@ class Interactive(AsyncAttrs, Base):
     discussion_duration = Column(Integer, nullable=False)
     countdown_duration = Column(Integer, nullable=False)
     conducted = Column(Boolean, nullable=False)
+    date_completed = Column(TIMESTAMP, nullable=True)
 
 
 class Question(AsyncAttrs, Base):

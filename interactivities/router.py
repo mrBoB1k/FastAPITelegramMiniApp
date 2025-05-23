@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Annotated
-from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate
+from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from datetime import datetime
@@ -42,5 +42,15 @@ async def creat_interactive(
             created_by_id = user_id
         )
     )
-
     return interactive_id
+
+
+@router.get("/me")
+async def get_me(
+    telegram_id: Annotated[TelegramId, Depends()],
+) -> MyInteractives:
+    user_id = await Repository.get_user_id(telegram_id.telegram_id)
+    interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
+    interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
+
+    return MyInteractives(interactives_list_conducted = interactives_list_conducted, interactives_list_not_conducted= interactives_list_not_conducted)
