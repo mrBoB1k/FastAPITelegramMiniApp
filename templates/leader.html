@@ -24,9 +24,9 @@
             const telegram_id = document.getElementById("telegram_id").value;
             const key = document.getElementById("key").value;
             const role = "leader";
-            // ws = new WebSocket(`wss://${location.host}/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
+            ws = new WebSocket(`wss://${location.host}/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
 
-            ws = new WebSocket(`ws://localhost:8000/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
+            // ws = new WebSocket(`ws://localhost:8000/ws/${interactive_id}?telegram_id=${telegram_id}&role=${role}&x_key=${key}`);
             ws.onopen = () => {
                 document.getElementById("controls").style.display = "block";
             };
