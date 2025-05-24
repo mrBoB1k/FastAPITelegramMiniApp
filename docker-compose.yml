@@ -1,11 +1,15 @@
+version: '3.8'
+
 services:
   fastapi_app:
     build:
       context: .
     container_name: fastapi_app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000
+    networks:
+      - app_network
 
   nginx:
     image: nginx:latest
@@ -17,3 +21,18 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - fastapi_app
+    networks:
+      - app_network
+
+  telegram_bot:
+    build:
+      context: ./bot
+    container_name: telegram_bot
+    depends_on:
+      - fastapi_app
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge

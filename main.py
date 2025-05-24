@@ -9,9 +9,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+_SECRET_KEY = os.getenv('SECRET_KEY')
 
 async def verify_key(x_key: str):
-    if x_key != "super-secret-key":
+    if x_key != _SECRET_KEY:
         raise HTTPException(status_code=400, detail="X-Key header invalid")
     return x_key
 
