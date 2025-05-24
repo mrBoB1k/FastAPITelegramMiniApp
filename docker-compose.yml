@@ -28,10 +28,10 @@ services:
     build:
       context: ./bot
     container_name: telegram_bot
-    expose:
-      - "8001"
+    environment:
+      - FASTAPI_URL=http://fastapi_app:8000
     env_file:
-      - .env  # Подключаем файл с переменными окружения
+      - .env  # Только для BOT_TOKEN
     depends_on:
       - fastapi_app
     networks:
