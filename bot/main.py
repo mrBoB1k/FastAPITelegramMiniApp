@@ -1,5 +1,6 @@
 import asyncio
-
+from aiohttp import web
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram import F, Router, Bot, Dispatcher
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
@@ -13,17 +14,21 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+FASTAPI_URL = os.getenv("FASTAPI_URL")
+
+# Проверка обязательных переменных
+if not all([BOT_TOKEN, WEBHOOK_URL, FASTAPI_URL]):
+    raise ValueError("Не все обязательные переменные окружения заданы!")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 router = Router()
 
-
 class CodeInput(StatesGroup):
     waiting_for_code = State()
-
 
 MAX_ATTEMPTS = 2
 
@@ -132,9 +137,48 @@ async def handle_start_with_param(message: Message, command: CommandObject):
 dp.include_router(router)
 
 
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+async def on_startup(bot: Bot):
+    # Установка webhook при старте приложения
+    await bot.set_webhook(
+        url=WEBHOOK_URL,
+        drop_pending_updates=True
+    )
+    print(f"Webhook установлен на {WEBHOOK_URL}")
+
+
+async def on_shutdown(bot: Bot):
+    # Удаление webhook при завершении работы
+    await bot.delete_webhook()
+    print("Webhook удален")
+
+
+def main():
+    # Создаем aiohttp приложение
+    app = web.Application()
+
+    # Создаем экземпляр обработчика webhook
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+
+    # Регистрируем обработчик по указанному пути
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+
+    # Настраиваем приложение aiogram
+    setup_application(app, dp, bot=bot)
+
+    # Добавляем обработчики старта и завершения
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+
+    # Запускаем приложение
+    web.run_app(
+        app,
+        host="0.0.0.0",
+        port=8001,
+    )
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
