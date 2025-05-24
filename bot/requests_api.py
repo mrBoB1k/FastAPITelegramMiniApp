@@ -7,12 +7,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
+# _URL = "http://127.0.0.1:8000"
+_URL = "http://fastapi_app:8000"
 # получение роли пользователя
 
+# _URL = "https://carclicker.ru"
 
 async def get_role(message):
-    url = "http://fastapi_app:8000/api/users/register"
+    url = f"{_URL}/api/users/register"
     params = {
         "x_key": os.getenv("SECRET_KEY"),
         "telegram_id": message.from_user.id,
@@ -41,7 +43,7 @@ async def get_role(message):
 
 
 async def check_code(code: str) -> int | None:
-    url = "http://fastapi_app:8000/api/interactivities/join"
+    url = f"{_URL}/api/interactivities/join"
     params = {
         "x_key": os.getenv("SECRET_KEY"),
         "code": code
