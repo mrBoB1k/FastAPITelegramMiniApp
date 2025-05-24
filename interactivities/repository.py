@@ -63,7 +63,7 @@ class Repository:
                     new_answer = Answer(
                         question_id=new_question.id,
                         text=answer['text'],
-                        is_correct=answer['is_answered']
+                        is_correct=answer['is_correct']
                     )
                     session.add(new_answer)
                     await session.flush()
@@ -165,7 +165,7 @@ class Repository:
                 answers_data = [
                     AnswerFull(
                         text=answer.text,
-                        is_answered=answer.is_correct
+                        is_correct=answer.is_correct
                     )
                     for answer in answers
                 ]
@@ -248,7 +248,7 @@ class Repository:
                     new_answer = Answer(
                         question_id=new_question.id,
                         text=answer_data.text,
-                        is_correct=answer_data.is_answered
+                        is_correct=answer_data.is_correct
                     )
                     session.add(new_answer)
 

@@ -30,7 +30,7 @@ async def creat_interactive(
             raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
         if len(question.answers) > 4:
             raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text}")
-        correct_answers = [a for a in question.answers if a.is_answered]
+        correct_answers = [a for a in question.answers if a.is_correct]
         if len(correct_answers) != 1:
             raise HTTPException(status_code=400,
                                 detail=f"There must be exactly one correct answer in question {question.text}")
@@ -109,7 +109,7 @@ async def get_interactive(
             raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
         if len(question.answers) > 4:
             raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text}")
-        correct_answers = [a for a in question.answers if a.is_answered]
+        correct_answers = [a for a in question.answers if a.is_correct]
         if len(correct_answers) != 1:
             raise HTTPException(status_code=400,
                                 detail=f"There must be exactly one correct answer in question {question.text}")

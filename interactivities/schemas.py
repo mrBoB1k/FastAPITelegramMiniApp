@@ -14,7 +14,7 @@ class UserIdAndRole(BaseModel):
 
 class Answer(BaseModel):
     text: str
-    is_answered: bool
+    is_correct: bool
 # question_id
 
 
