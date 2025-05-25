@@ -43,7 +43,7 @@ def get_link_to_main_menu():
         [
             InlineKeyboardButton(
                 text="Нажмите, чтобы войти 🌐",
-                web_app=WebAppInfo(url="https://voshod07.ru/index")
+                web_app=WebAppInfo(url="https://voshod07.ru/leader/main_menu")
             )
         ]
     ])
