@@ -64,6 +64,8 @@ class Answer(BaseModel):
     id: int
     text: str
 
+class AnswerGet(Answer):
+    is_correct: bool
 
 class DataStageQuestion(BaseModel):
     questions_count: int

@@ -4,7 +4,7 @@ from models import *
 from datetime import datetime
 from sqlalchemy.sql import label
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, PutUserAnswers, \
-    Percentage, Answer as AnswerSchema, Winner
+    Percentage, Answer as AnswerSchema, Winner, AnswerGet
 
 
 class Repository:
@@ -84,7 +84,7 @@ class Repository:
             ]
 
     @classmethod
-    async def get_question_answers(cls, question_id: int) -> list[AnswerSchema]:
+    async def get_question_answers(cls, question_id: int) -> list[AnswerGet]:
         async with new_session() as session:
             result = await session.execute(
                 select(Answer)
@@ -93,7 +93,7 @@ class Repository:
 
             answers = result.scalars().all()
             return [
-                AnswerSchema(id=a.id, text=a.text)
+                AnswerGet(id=a.id, text=a.text, is_correct=a.is_correct)
                 for a in answers
             ]
 
