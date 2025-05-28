@@ -91,26 +91,47 @@ class Repository:
                 .group_by(Question.interactive_id)
                 .subquery()
             )
-
-            query = (
-                select(
-                    Interactive.id,
-                    Interactive.title,
-                    Interactive.target_audience,
-                    Interactive.date_completed,
-                    question_count_subq.c.question_count
+            if conducted:
+                query = (
+                    select(
+                        Interactive.id,
+                        Interactive.title,
+                        Interactive.target_audience,
+                        Interactive.date_completed,
+                        question_count_subq.c.question_count
+                    )
+                    .join(
+                        question_count_subq,
+                        Interactive.id == question_count_subq.c.interactive_id,
+                        isouter=True
+                    )
+                    .where(
+                        Interactive.created_by_id == user_id,
+                        Interactive.conducted == conducted
+                    )
+                    .order_by(Interactive.date_completed.desc())
                 )
-                .join(
-                    question_count_subq,
-                    Interactive.id == question_count_subq.c.interactive_id,
-                    isouter=True
+            else:
+                query = (
+                    select(
+                        Interactive.id,
+                        Interactive.title,
+                        Interactive.target_audience,
+                        Interactive.date_completed,
+                        Interactive.created_at,
+                        question_count_subq.c.question_count
+                    )
+                    .join(
+                        question_count_subq,
+                        Interactive.id == question_count_subq.c.interactive_id,
+                        isouter=True
+                    )
+                    .where(
+                        Interactive.created_by_id == user_id,
+                        Interactive.conducted == conducted
+                    )
+                    .order_by(Interactive.created_at.desc())
                 )
-                .where(
-                    Interactive.created_by_id == user_id,
-                    Interactive.conducted == conducted
-                )
-                .order_by(Interactive.date_completed.desc())
-            )
 
             result = await session.execute(query)
             interactives = result.all()
