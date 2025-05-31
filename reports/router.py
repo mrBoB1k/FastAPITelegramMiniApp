@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import Annotated, Any, Type, Coroutine, List
-from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportGet,ExportEnum
+from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportGet, ExportEnum
 from reports.repository import Repository
 from users.schemas import UserRoleEnum
 from datetime import datetime
 import io
-import pandas as pd
-
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.writer.excel import save_virtual_workbook
 
 router = APIRouter(
     prefix="/api/reports",
@@ -31,58 +33,172 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="User not found")
 
     if input_data.report_type == ExportEnum.forAnalise.value:
-        all_data = []
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Analytics Report"
+
+        # Заголовки
+        headers = [
+            "id_интерактива", "Название интерактива", "Дата проведения",
+            "Общее количество участников", "Общее количество вопросов",
+            "Целевая аудитория", "Место проведения", "ФИО ведущего",
+            "tg_id", "tg_username", "ФИО участника", "Количество правильных ответов"
+        ]
+        ws.append(headers)
+
+        # Данные
         for interactive_id_data in input_data.interactive_id:
-            interactive_data = await Repository.get_interactive_export_for_analise(interactive_id_data.id)
-            all_data.extend(interactive_data)
+            items = await Repository.get_interactive_export_for_analise(interactive_id_data.id)
+            for item in items:
+                ws.append([
+                    item.interactive_id,
+                    item.title,
+                    item.date_completed,
+                    item.participant_count,
+                    item.question_count,
+                    item.target_audience,
+                    item.location,
+                    item.responsible_full_name,
+                    item.telegram_id,
+                    item.username,
+                    item.full_name,
+                    item.correct_answers_count
+                ])
 
-        df = pd.DataFrame([{
-            "id_интерактива": item.interactive_id,
-            "Название интерактива": item.title,
-            "Дата проведения": item.date_completed,
-            "Общее количество участников": item.participant_count,
-            "Общее количество вопросов": item.question_count,
-            "Целевая аудитория": item.target_audience,
-            "Место проведения": item.location,
-            "ФИО ведущего": item.responsible_full_name,
-            "tg_id": item.telegram_id,
-            "tg_username": item.username,
-            "ФИО участника": item.full_name,
-            "Количество правильных ответов": item.correct_answers_count
-        } for item in all_data])
+        # Возвращаем файл
+        headers = {
+            'Content-Disposition': 'attachment; filename="analytics_report.xlsx"',
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+        return StreamingResponse(
+            io.BytesIO(save_virtual_workbook(wb)),
+            headers=headers
+        )
 
-        # Создаем Excel файл в памяти
+    elif input_data.report_type == ExportEnum.forLeader.value:
+        wb = Workbook()
+        wb.remove(wb.active)  # Удаляем дефолтный лист
+
+        for interactive_id_data in input_data.interactive_id:
+            data = await Repository.get_export_for_leader(interactive_id_data.id)
+
+            # Создаем новый лист для каждого интерактива
+            ws = wb.create_sheet(title=f"Интерактив {data.header.interactive_id}")
+
+            # Настройка ширины столбцов
+            for col in range(1, 14):
+                ws.column_dimensions[get_column_letter(col)].width = 15
+
+            # Стили
+            correct_answer_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
+            bold_font = Font(bold=True)
+            center_alignment = Alignment(horizontal='center')
+
+            # 1. Заголовок интерактива (A1:M7)
+            interact_info = [
+                f"Название интерактива: {data.header.title}",
+                f"Id_интерактива: {data.header.interactive_id}",
+                f"Дата проведения: {data.header.date_completed}",
+                f"Общее количество участников: {len(data.body)}",
+                f"Целевая аудитория: {data.header.target_audience}" if data.header.target_audience else "Целевая аудитория: не указано",
+                f"Место проведения: {data.header.location}" if data.header.location else "Место проведения: не указано",
+                f"ФИО ведущего: {data.header.responsible_full_name}" if data.header.responsible_full_name else "ФИО ведущего: не указано"
+            ]
+
+            for i, info in enumerate(interact_info, start=1):
+                cell = ws.cell(row=i, column=1, value=info)
+                ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=13)
+                cell.font = bold_font
+
+            # 2. Вопросы и ответы (строка 11-14)
+            current_col = 6  # Начинаем с колонки F
+
+            for question in sorted(data.header.question, key=lambda q: q.position):
+                answer_count = len(question.answers)
+
+                # Заголовок вопроса (строка 11)
+                ws.cell(row=11, column=current_col, value=f"Вопрос {question.position}").font = bold_font
+                ws.merge_cells(start_row=11, start_column=current_col, end_row=11,
+                               end_column=current_col + answer_count - 1)
+
+                # Текст вопроса (строка 12)
+                ws.cell(row=12, column=current_col, value=question.text)
+                ws.merge_cells(start_row=12, start_column=current_col, end_row=12,
+                               end_column=current_col + answer_count - 1)
+
+                # Варианты ответов (строка 13)
+                for i in range(answer_count):
+                    ws.cell(row=13, column=current_col + i, value=f"Ответ {i + 1}")
+
+                # Тексты ответов (строка 14)
+                for i, answer in enumerate(question.answers):
+                    cell = ws.cell(row=14, column=current_col + i, value=answer.text)
+                    if answer.is_correct:
+                        cell.fill = correct_answer_fill
+
+                current_col += answer_count  # Сдвигаем на нужное количество колонок
+
+            # 3. Заголовки таблицы участников (строка 15)
+            headers = ["№", "telegram_id", "username", "ФИО", "Правильных ответов"]
+            for col, header in enumerate(headers, start=1):
+                ws.cell(row=15, column=col, value=header).font = bold_font
+
+            # 4. Данные участников (начиная со строки 16)
+            for i, participant in enumerate(data.body, start=1):
+                row = 15 + i
+
+                # Основная информация
+                ws.cell(row=row, column=1, value=i).alignment = center_alignment
+                ws.cell(row=row, column=2, value=participant.telegram_id)
+                ws.cell(row=row, column=3, value=participant.username)
+                ws.cell(row=row, column=4, value=participant.full_name)
+                ws.cell(row=row, column=5, value=f"{participant.correct_answers_count}/{len(data.header.question)}")
+
+                # Ответы участника
+                current_col = 6
+                for question in sorted(data.header.question, key=lambda q: q.position):
+                    answer_count = len(question.answers)
+
+                    # Сначала заполняем все 0
+                    for j in range(answer_count):
+                        ws.cell(row=row, column=current_col + j, value=0).alignment = center_alignment
+
+                    # Затем отмечаем выбранные ответы
+                    for answer in participant.answers:
+                        if answer.question_id == question.id:
+                            for j, a in enumerate(question.answers):
+                                if a.id == answer.answer_id:
+                                    ws.cell(row=row, column=current_col + j, value=1).alignment = center_alignment
+
+                    current_col += answer_count
+
+            # 5. Подсчет ответивших (строка после последнего участника)
+            stats_row = 15 + len(data.body) + 1
+            ws.cell(row=stats_row, column=5, value="Количество ответивших").font = bold_font
+
+            current_col = 6
+            for question in sorted(data.header.question, key=lambda q: q.position):
+                answer_count = len(question.answers)
+
+                for j in range(answer_count):
+                    col = current_col + j
+                    first_row = 16
+                    last_row = 15 + len(data.body)
+                    ws.cell(row=stats_row, column=col,
+                            value=f"=SUM({get_column_letter(col)}{first_row}:{get_column_letter(col)}{last_row})")
+
+                current_col += answer_count
+
+        # Возвращаем файл как поток
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='Report', index=False)
-            worksheet = writer.sheets['Report']
-
-            # Автоподбор ширины колонок (опционально)
-            for i, col in enumerate(df.columns):
-                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                worksheet.set_column(i, i, max_len)
-
+        wb.save(output)
         output.seek(0)
 
         headers = {
-            'Content-Disposition': f'attachment; filename="analytics_report_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx"',
+            'Content-Disposition': 'attachment; filename="leader_report.xlsx"',
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
         return StreamingResponse(output, headers=headers)
-    else:
-        raise HTTPException(status_code=404, detail="Invalid export type") # позже будет второй тип отчёта
-    # # Создаем Excel файл в памяти
-    # output = io.BytesIO()
-    # with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-    #     df.to_excel(writer, sheet_name='Report', index=False)
-    #
-    # # Перемещаем указатель в начало файла
-    # output.seek(0)
-    #
-    # # Возвращаем файл как поток
-    # headers = {
-    #     'Content-Disposition': 'attachment; filename="report.xlsx"',
-    #     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    # }
-    # return StreamingResponse(output, headers=headers)
 
+    else:
+        raise HTTPException(status_code=400, detail="Invalid export type")

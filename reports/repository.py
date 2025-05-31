@@ -2,7 +2,8 @@ from sqlalchemy import select, delete, and_
 from database import new_session
 from models import *
 from datetime import datetime
-from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportForAnalise
+from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportForAnalise, ExportForLeaderData, \
+    ExportForLeaderHeader, ExportForLeaderBody, QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer
 import random
 import string
 from typing import Optional, List, Any, Type, Coroutine
@@ -147,3 +148,113 @@ class Repository:
         if date_obj is None:
             return None
         return date_obj.strftime('%d.%m.%Y')
+
+    @classmethod
+    async def get_export_for_leader(cls, interactive_id: int) -> ExportForLeaderData:
+        async with new_session() as session:
+            # 1. Получаем информацию об интерактиве
+            interactive = await session.get(Interactive, interactive_id)
+            if not interactive:
+                raise ValueError(f"Интерактив с ID {interactive_id} не найден")
+
+            # 2. Получаем всех участников
+            participants = await session.execute(
+                select(QuizParticipant)
+                .where(QuizParticipant.interactive_id == interactive_id)
+            )
+            participants = participants.scalars().all()
+
+            # 3. Получаем все вопросы и ответы для интерактива
+            questions_result = await session.execute(
+                select(Question)
+                .where(Question.interactive_id == interactive_id)
+                .order_by(Question.position)
+            )
+            questions = questions_result.scalars().all()
+
+            # 4. Формируем header
+            questions_data = []
+            for question in questions:
+                answers_result = await session.execute(
+                    select(Answer)
+                    .where(Answer.question_id == question.id)
+                )
+                answers = answers_result.scalars().all()
+
+                answers_data = [
+                    AnswerForLeaderHeader(
+                        id=answer.id,
+                        text=answer.text,
+                        is_correct=answer.is_correct
+                    )
+                    for answer in answers
+                ]
+
+                questions_data.append(
+                    QuestionForLeaderHeader(
+                        id=question.id,
+                        position=question.position,
+                        text=question.text,
+                        answers=answers_data
+                    )
+                )
+
+            header = ExportForLeaderHeader(
+                title=interactive.title,
+                interactive_id=interactive.id,
+                date_completed=cls._format_date(interactive.date_completed),
+                participant_count=len(participants),
+                target_audience=interactive.target_audience,
+                location=interactive.location,
+                responsible_full_name=interactive.responsible_full_name,
+                question=questions_data
+            )
+
+            # 5. Формируем body с ответами участников
+            body_data = []
+            for participant in participants:
+                user = await session.get(User, participant.user_id)
+                if not user:
+                    continue
+
+                # Получаем все ответы участника
+                user_answers_result = await session.execute(
+                    select(UserAnswer)
+                    .where(UserAnswer.participant_id == participant.id)
+                )
+                user_answers = user_answers_result.scalars().all()
+
+                # Считаем правильные ответы
+                correct_answers = 0
+                participant_answers = []
+                for ua in user_answers:
+                    answer = await session.get(Answer, ua.answer_id)
+                    if answer and answer.is_correct:
+                        correct_answers += 1
+
+                    participant_answers.append(
+                        ParticipantAnswer(
+                            question_id=ua.question_id,
+                            answer_id=ua.answer_id
+                        )
+                    )
+
+                # Формируем полное имя
+                full_name = user.first_name
+                if user.last_name:
+                    full_name += f" {user.last_name}"
+
+                body_data.append(
+                    ExportForLeaderBody(
+                        telegram_id=user.telegram_id,
+                        username=user.username,
+                        full_name=full_name,
+                        correct_answers_count=correct_answers,
+                        answers=participant_answers
+                    )
+                )
+
+            return ExportForLeaderData(
+                header=header,
+                body=body_data
+            )
