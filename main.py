@@ -2,9 +2,12 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import init_db
+
 from users.router import router as user_router
 from websocket.router import router as websocket_router
 from interactivities.router import router as interactivity_router
+from reports.router import router as report_router
+
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -55,6 +58,7 @@ async def get_participant(request: Request):
 app.include_router(user_router)
 app.include_router(interactivity_router)
 app.include_router(websocket_router)
+app.include_router(report_router)
 
 # html = """
 # <!DOCTYPE html>

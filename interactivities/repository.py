@@ -152,7 +152,7 @@ class Repository:
         """Преобразует datetime в строку формата 'день.месяц.год' (23.05.25)"""
         if date_obj is None:
             return None
-        return date_obj.strftime('%d.%m.%Y')
+        return date_obj.strftime('%d.%m.%y')
 
     @classmethod
     async def get_all_interactive_info(cls, user_id: int, interactive_id: int) -> InteractiveFull | None:
