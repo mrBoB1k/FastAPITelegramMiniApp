@@ -5,7 +5,7 @@ from aiogram.types import Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-from requests_api import get_role, check_code
+from requests_api import get_role, check_code, change_user_role
 from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu
 
 from dotenv import load_dotenv
@@ -67,6 +67,22 @@ async def start_cmd(message: Message, state: FSMContext):
     await state.set_state(CodeInput.waiting_for_code)
     await state.update_data(attempts=0)
     await message.answer("Введите код для подключения к интерактиву")
+
+@router.message(F.text == "Получить роль ведущего для комиссий урфу")
+async def get_leader_role(message: Message):
+    success = await change_user_role(message.from_user.id, "leader")
+    if success:
+        await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
+    else:
+        await message.answer("Не удалось изменить роль. Пожалуйста, попробуйте позже.")
+
+@router.message(F.text == "Получить роль участника для комиссий урфу")
+async def get_participant_role(message: Message):
+    success = await change_user_role(message.from_user.id, "participant")
+    if success:
+        await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
+    else:
+        await message.answer("Не удалось изменить роль. Пожалуйста, попробуйте позже.")
 
 
 @router.message(CodeInput.waiting_for_code)
