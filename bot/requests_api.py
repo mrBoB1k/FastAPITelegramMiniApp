@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# _URL = "http://127.0.0.1:8000"
-_URL = "http://fastapi_app:8000"
+_URL = "http://127.0.0.1:8000"
+# _URL = "http://fastapi_app:8000"
 # получение роли пользователя
 
 # _URL = "https://carclicker.ru"
@@ -83,7 +83,7 @@ async def change_user_role(telegram_id: int, role: str):
     ssl_context = ssl.create_default_context(cafile=certifi.where())
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, params=params, ssl=ssl_context) as response:
+        async with session.patch(url, params=params, ssl=ssl_context) as response:
             if response.status == 200:
                 return True
             return False
