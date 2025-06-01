@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_URL = "http://127.0.0.1:8000"
-# _URL = "http://fastapi_app:8000"
+# _URL = "http://127.0.0.1:8000"
+_URL = "http://fastapi_app:8000"
 # получение роли пользователя
 
 # _URL = "https://carclicker.ru"
