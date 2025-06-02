@@ -134,7 +134,9 @@ async def handle_start_with_param(message: Message, command: CommandObject):
     await message.answer(greeting, reply_markup=keyboard)
 
     if is_valid_role:
-        interactive_id = await check_code(message.text)
+        print(f"Получен код {param}")
+        interactive_id = await check_code(param)
+        print(f"Код интерактива {interactive_id}")
         if interactive_id is not None:
             await message.answer(
                 "✅ Код верный! Подключайтесь к интерактиву! Скоро начнем!",
