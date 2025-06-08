@@ -1,7 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import enum
 from users.schemas import UserRoleEnum
-
+from fastapi import WebSocket
 
 class Stage(str, enum.Enum):
     waiting = "waiting"
@@ -136,3 +136,11 @@ class PutUserAnswers(BaseModel):
     question_id: int
     participant_id: int
     answer_id: int
+
+
+class WebSocketConnection(BaseModel):
+    websocket: WebSocket
+    user_id: int
+    role: UserRoleEnum
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -13,7 +13,6 @@ router = APIRouter(
 
 manager = SessionManager()
 
-
 @router.websocket("/{interactive_id}")
 async def websocket_endpoint(
         websocket: WebSocket,
@@ -34,7 +33,7 @@ async def websocket_endpoint(
     if role == UserRoleEnum.leader and not (await Repository.check_interactive_creates(interactive_id, user_id)):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="User does not have access")
 
-    await manager.connect(websocket, interactive_id)
+    await manager.connect(websocket, interactive_id, user_id, role)
     try:
         if role == UserRoleEnum.leader:
             while True:
@@ -51,7 +50,7 @@ async def websocket_endpoint(
                 await manager.handle_participant_message(participant_sent, participant_id, interactive_id)
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket, interactive_id)
+        await manager.disconnect(interactive_id, user_id, role)
     except Exception as e:
         print(f"WebSocket error: {e}")
-        manager.disconnect(websocket, interactive_id)
+        await manager.disconnect(interactive_id, user_id, role)

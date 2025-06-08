@@ -3,7 +3,8 @@ from database import new_session
 from models import *
 from datetime import datetime
 from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportForAnalise, ExportForLeaderData, \
-    ExportForLeaderHeader, ExportForLeaderBody, QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer
+    ExportForLeaderHeader, ExportForLeaderBody, QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer, \
+    DateTitleSH
 import random
 import string
 from typing import Optional, List, Any, Type, Coroutine
@@ -130,6 +131,8 @@ class Repository:
                     correct_answers_count=correct_answers_count
                 ))
 
+            analytics_data.sort(key=lambda x: x.correct_answers_count, reverse=True)
+
             return analytics_data
 
     @classmethod
@@ -254,7 +257,20 @@ class Repository:
                     )
                 )
 
+            body_data.sort(key=lambda x: x.correct_answers_count, reverse=True)
+
             return ExportForLeaderData(
                 header=header,
                 body=body_data
             )
+
+    @classmethod
+    async def get_title_and_date_for_interactive(cls, interactive_id: int) -> DateTitleSH | None:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Interactive).where(Interactive.id == interactive_id)
+            )
+            data = result.scalar_one_or_none()
+            if data is not None:
+                return DateTitleSH(title=data.title, date_completed=cls._format_date2(data.date_completed))
+            return data

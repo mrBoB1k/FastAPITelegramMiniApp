@@ -33,7 +33,7 @@ class Repository:
     @classmethod
     async def generate_unique_code(cls, length: int = 6) -> str:
         # Простой читаемый код: буквы и цифры, например AB123C
-        alphabet = string.ascii_uppercase + string.digits
+        alphabet = string.digits
         while True:
             code = ''.join(random.choices(alphabet, k=length))
             if not await cls.check_code_exists(code):

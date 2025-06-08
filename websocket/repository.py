@@ -111,14 +111,35 @@ class Repository:
     @classmethod
     async def register_quiz_participant(cls, data: CreateQuizParticipant) -> int:
         async with new_session() as session:
-            participant_dict = data.model_dump()
+            flag = await session.execute(
+                select(QuizParticipant)
+                .where(QuizParticipant.interactive_id == data.interactive_id, QuizParticipant.user_id == data.user_id)
+            )
 
-            participant = QuizParticipant(**participant_dict)
-            session.add(participant)
+            flag = flag.scalar_one_or_none()
+            if flag is None:
+                participant_dict = data.model_dump()
 
-            await session.flush()
-            await session.commit()
-            return participant.id
+                participant = QuizParticipant(**participant_dict)
+                session.add(participant)
+
+                await session.flush()
+                await session.commit()
+                return participant.id
+            else:
+                return flag.id
+
+    @classmethod
+    async def check_register_quiz_participant(cls, data: CreateQuizParticipant) -> bool:
+        async with new_session() as session:
+            flag = await session.execute(
+                select(QuizParticipant)
+                .where(QuizParticipant.interactive_id == data.interactive_id, QuizParticipant.user_id == data.user_id)
+            )
+
+            flag = flag.scalar_one_or_none()
+            return flag is not None
+
 
     @classmethod
     async def put_user_answers(cls, data: PutUserAnswers):
@@ -163,7 +184,7 @@ class Repository:
             return [
                 Percentage(
                     id=row.answer_id,
-                    percentage=(row.count / total) * 100
+                    percentage=round((row.count / total) * 100,2)
                 )
                 for row in rows
             ]

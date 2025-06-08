@@ -90,6 +90,15 @@ class InteractiveSession:
         self.time_task = asyncio.create_task(self._main_loop())
         self.time_task.add_done_callback(self._task_done)
 
+    async def stop(self):
+        if self.time_task is not None:
+            self.time_task.cancel()  # Отправляем запрос на отмену задачи
+            try:
+                await self.time_task  # Ждём завершения задачи (нужно для обработки исключения отмены)
+            except asyncio.CancelledError:
+                pass  # Ожидаемое исключение при отмене задачи
+            self.time_task = None
+
     def _task_done(self, task):
         manager = self._manager_ref()
         if manager is not None:

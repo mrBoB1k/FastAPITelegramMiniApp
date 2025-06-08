@@ -81,3 +81,7 @@ class ExportForLeaderBody(BaseModel):
 class ExportForLeaderData(BaseModel):
     header: ExportForLeaderHeader
     body: list[ExportForLeaderBody]  # Список участников с их ответами
+
+class DateTitleSH(BaseModel):
+    title: str
+    date_completed: str

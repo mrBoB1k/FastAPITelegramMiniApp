@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import F, Router, Bot, Dispatcher
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import CommandObject, CommandStart, Command
 from aiogram.types import Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -64,6 +64,7 @@ async def start_cmd(message: Message):
 
 @router.message(F.text == "Подключение к интерактиву")
 async def start_cmd(message: Message, state: FSMContext):
+    print('я ожидаю ввод кода')
     await state.set_state(CodeInput.waiting_for_code)
     await state.update_data(attempts=0)
     await message.answer("Введите код для подключения к интерактиву")
@@ -74,7 +75,7 @@ async def get_leader_role(message: Message):
     if success:
         await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
     else:
-        await message.answer("Не удалось изменить роль. Пожалуйста, попробуйте позже.")
+        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
 
 @router.message(F.text == "Получить роль участника для комиссий урфу")
 async def get_participant_role(message: Message):
@@ -82,21 +83,63 @@ async def get_participant_role(message: Message):
     if success:
         await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
     else:
-        await message.answer("Не удалось изменить роль. Пожалуйста, попробуйте позже.")
-
+        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
 
 @router.message(CodeInput.waiting_for_code)
 async def handle_code_input(message: Message, state: FSMContext):
+    code  = message.text
+    if code.startswith("/start"):
+        code = code[7:]
+    await process_code(code, message, state)
+
+@router.message(CommandStart(deep_link=True))
+async def handle_start_with_param(message: Message, command: CommandObject, state: FSMContext):
+    param = command.args
+    if not param:
+        return
+    # Проверяем состояние
+    current_state = await state.get_state()
+    if current_state == CodeInput.waiting_for_code.state:
+        # Обрабатываем код из deep link
+        await process_code(param, message, state)
+        return
+
+    # Остальная логика для обычного deep link
+    role = await get_role(message)
+    is_valid_role = True
+    keyboard = None
+
+    if role == "leader":
+        keyboard = get_host_keyboard()
+        greeting = f"Получен код интерактива: {param}"
+    elif role == "participant":
+        keyboard = get_member_keyboard()
+        greeting = f"Получен код интерактива: {param}"
+    else:
+        is_valid_role = False
+        greeting = "Ваша роль не распознана. Пожалуйста, свяжитесь с администратором."
+
+    await message.answer(greeting, reply_markup=keyboard)
+
+    if is_valid_role:
+        if await process_code(param, message, state):
+            return
+        await message.answer(
+            "Код неверный, попробуйте ввести его вручную. Сначала нажмите кнопку \"Подключение к интерактиву\""
+        )
+
+async def process_code(code: str, message: Message, state: FSMContext):
     user_data = await state.get_data()
     attempts = user_data.get("attempts", 0)
 
-    interactive_id = await check_code(message.text)
+    interactive_id = await check_code(code)
     if interactive_id is not None:
         await message.answer(
             "✅ Код верный! Подключайтесь к интерактиву! Скоро начнем!",
             reply_markup=get_link_to_interavctive(interactive_id)
         )
-        return
+        await state.clear()
+        return True
 
     attempts += 1
     if attempts >= MAX_ATTEMPTS:
@@ -107,46 +150,7 @@ async def handle_code_input(message: Message, state: FSMContext):
     else:
         await state.update_data(attempts=attempts)
         await message.answer("Попробуйте ввести код еще раз")
-
-
-@router.message(CommandStart(deep_link=True))
-async def handle_start_with_param(message: Message, command: CommandObject):
-    param = command.args
-    if not param:
-        return
-
-    role = await get_role(message)
-    is_valid_role = True
-    keyboard = None
-
-    if role == "leader":
-        keyboard = get_host_keyboard()
-        greeting = f"Получен код интерактива: {param}"
-
-    elif role == "participant":
-        keyboard = get_member_keyboard()
-        greeting = f"Получен код интерактива: {param}"
-
-    else:
-        is_valid_role = False
-        greeting = "Ваша роль не распознана. Пожалуйста, свяжитесь с администратором."
-
-    await message.answer(greeting, reply_markup=keyboard)
-
-    if is_valid_role:
-        print(f"Получен код {param}")
-        interactive_id = await check_code(param)
-        print(f"Код интерактива {interactive_id}")
-        if interactive_id is not None:
-            await message.answer(
-                "✅ Код верный! Подключайтесь к интерактиву! Скоро начнем!",
-                reply_markup=get_link_to_interavctive(interactive_id)
-            )
-        else:
-            await message.answer(
-                "Код неверный, попробуйте ввести его вручную. Сначала нажмите кнопку \"Подключение к интерактиву\""
-            )
-
+    return False
 
 dp.include_router(router)
 
