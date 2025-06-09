@@ -69,12 +69,12 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
 
         # Возвращаем файл
         filename = "analytics_report.xlsx"
-        # if len(input_data.interactive_id) == 1:
-        #     data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
-        #     if data_title_date:
-        #         translit_title =  smart_translit(data_title_date.title).lower().replace(' ', '_')
-        #         translit_title = re.sub(r'[^\w_]', '', translit_title)
-        #         filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
+        if len(input_data.interactive_id) == 1:
+            data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
+            if data_title_date:
+                translit_title =  smart_translit(data_title_date.title).lower().replace(' ', '_')
+                translit_title = re.sub(r'[^\w_]', '', translit_title)
+                filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
 
         headers = {
             'Content-Disposition': f'attachment; filename="{filename}"',
@@ -205,11 +205,12 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
         output.seek(0)
 
         filename = "leader_report.xlsx"
-        # if len(input_data.interactive_id) == 1:
-        #     data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
-        #     translit_title = transliterate.translit(data_title_date.title, reversed=True)
-        #     formatted_title = translit_title.lower().replace(' ', '_')
-        #     filename = f"{formatted_title}_{data_title_date.date_completed}.xlsx"
+        if len(input_data.interactive_id) == 1:
+            data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
+            if data_title_date:
+                translit_title =  smart_translit(data_title_date.title).lower().replace(' ', '_')
+                translit_title = re.sub(r'[^\w_]', '', translit_title)
+                filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
 
         headers = {
             'Content-Disposition': f'attachment; filename="{filename}"',
@@ -220,21 +221,25 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
     else:
         raise HTTPException(status_code=400, detail="Invalid export type")
 
-#
-# def smart_translit(text):
-#     # Разделяем текст на слова и символы
-#     words = re.findall(r'([а-яА-ЯёЁ]+|\w+|[^\w]+)', text)
-#     result = []
-#
-#     for word in words:
-#         # Если слово содержит кириллицу — транслитерируем
-#         if re.search(r'[а-яА-ЯёЁ]', word):
-#             try:
-#                 translit_word = transliterate.translit(word, reversed=True)
-#                 result.append(translit_word)
-#             except:
-#                 result.append(word)  # Если ошибка — оставляем как есть
-#         else:
-#             result.append(word)  # Английские слова и символы оставляем
-#
-#     return ''.join(result)
+
+def smart_translit(text):
+    # Разделяем текст на слова и символы
+    words = re.findall(r'([а-яА-ЯёЁ]+|\w+|[^\w\s]+|\s+)', text)
+    result = []
+
+    for word in words:
+        # Если слово содержит кириллицу — транслитерируем
+        if re.search(r'[а-яА-ЯёЁ]', word):
+            try:
+                # Указываем язык явно (русский) и включаем строгий режим
+                translit_word = transliterate.translit(word, 'ru', reversed=True)
+                # Заменяем мягкий/твёрдый знаки на апостроф или удаляем
+                translit_word = translit_word.replace("'", "").replace('"', '')
+                result.append(translit_word)
+            except Exception as e:
+                print(f"Transliteration error for '{word}': {e}")
+                result.append(word)  # Если ошибка — оставляем как есть
+        else:
+            result.append(word)  # Английские слова и символы оставляем
+
+    return ''.join(result)
