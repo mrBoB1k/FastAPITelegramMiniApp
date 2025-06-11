@@ -58,19 +58,21 @@ async def start_handler(message: Message):
 
 @router.message(F.text == "Управление интерактивами")
 async def start_cmd(message: Message):
+    role = await get_role(message)
     if await get_role(message) == "leader":
         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_main_menu())
 
 
 @router.message(F.text == "Подключение к интерактиву")
 async def start_cmd(message: Message, state: FSMContext):
-    print('я ожидаю ввод кода')
+    role = await get_role(message)
     await state.set_state(CodeInput.waiting_for_code)
     await state.update_data(attempts=0)
     await message.answer("Введите код для подключения к интерактиву")
 
 @router.message(F.text == "Получить роль ведущего для комиссий урфу")
 async def get_leader_role(message: Message):
+    role = await get_role(message)
     success = await change_user_role(message.from_user.id, "leader")
     if success:
         await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
@@ -79,6 +81,7 @@ async def get_leader_role(message: Message):
 
 @router.message(F.text == "Получить роль участника для комиссий урфу")
 async def get_participant_role(message: Message):
+    role = await get_role(message)
     success = await change_user_role(message.from_user.id, "participant")
     if success:
         await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
@@ -87,6 +90,7 @@ async def get_participant_role(message: Message):
 
 @router.message(CodeInput.waiting_for_code)
 async def handle_code_input(message: Message, state: FSMContext):
+    role = await get_role(message)
     code  = message.text
     if code.startswith("/start"):
         code = code[7:]
@@ -97,6 +101,12 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
     param = command.args
     if not param:
         return
+
+    role = await get_role(message)
+    is_valid_role = True
+    keyboard = None
+
+
     # Проверяем состояние
     current_state = await state.get_state()
     if current_state == CodeInput.waiting_for_code.state:
@@ -105,10 +115,6 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
         return
 
     # Остальная логика для обычного deep link
-    role = await get_role(message)
-    is_valid_role = True
-    keyboard = None
-
     if role == "leader":
         keyboard = get_host_keyboard()
         greeting = f"Получен код интерактива: {param}"
@@ -129,6 +135,7 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
         )
 
 async def process_code(code: str, message: Message, state: FSMContext):
+    role = await get_role(message)
     user_data = await state.get_data()
     attempts = user_data.get("attempts", 0)
 
