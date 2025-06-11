@@ -12,5 +12,9 @@ class SendGet(BaseModel):
     interactive_id: list[InteractiveId]
     text: str
 
+class SendGet2(BaseModel):
+    telegram_id: int
+    text: str
+
 class TelegramId(BaseModel):
     telegram_id: int

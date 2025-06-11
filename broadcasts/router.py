@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from broadcasts.schemas import SendGet
+from broadcasts.schemas import SendGet, SendGet2
 from typing import Annotated
 from broadcasts.repository import Repository
 import asyncio
@@ -46,3 +46,12 @@ async def send_telegram_message(text: str, telegram_id: int):
     async with httpx.AsyncClient() as client:
         response = await client.post(url, params=params)
     return response.json()
+
+@router.post('/test')
+async def get_send(input_data: SendGet2):
+    user_id = await Repository.get_user_id(input_data.telegram_id)
+    if user_id is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await send_telegram_message(input_data.text, input_data.telegram_id)
+    return {"status": "Сообщение отправлено"}

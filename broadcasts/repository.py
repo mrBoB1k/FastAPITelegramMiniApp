@@ -11,7 +11,7 @@ class Repository:
     async def get_user_id(cls, telegram_id: int) -> int | None:
         async with new_session() as session:
             result = await session.execute(
-                select(User.id).where(User.telegram_id == telegram_id)
+                select(User.id).where(User.telegram_id == telegram_id, User.role == UserRole.leader)
             )
             user_id = result.scalar_one_or_none()
             return user_id
