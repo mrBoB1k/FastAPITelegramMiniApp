@@ -8,6 +8,7 @@ from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, Exp
 import random
 import string
 from typing import Optional, List, Any, Type, Coroutine
+from fastapi import HTTPException
 
 
 class Repository:
@@ -80,7 +81,7 @@ class Repository:
             # 1. Получаем базовую информацию об интерактиве
             interactive = await session.get(Interactive, interactive_id)
             if not interactive:
-                raise ValueError(f"Интерактив с ID {interactive_id} не найден")
+                raise HTTPException(status_code=404, detail="Интерактив с ID {interactive_id} не найден")
 
             # 2. Получаем всех участников интерактива
             participants = await session.execute(

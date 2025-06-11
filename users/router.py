@@ -15,6 +15,8 @@ async def register(
 ) -> UserRole:
     user_role = await Repository.get_role_by_telegram_id(user.telegram_id)
     if user_role is None:
+        if user.username is None:
+            user.username = ""
         user_role = await Repository.register_user(user)
     return UserRole(role=user_role)
 

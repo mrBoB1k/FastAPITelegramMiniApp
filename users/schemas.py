@@ -18,7 +18,7 @@ class TelegramId(BaseModel):
 
 class UserRegister(BaseModel):
     telegram_id: int
-    username: str
+    username: str | None = ""
     first_name: str
     last_name: str | None = None
     phone_number: str | None = None
