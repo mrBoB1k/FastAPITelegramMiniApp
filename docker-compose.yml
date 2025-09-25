@@ -1,7 +1,9 @@
 services:
   fastapi_app:
     build:
-      context: .
+      context: ./src
+    env_file:
+      - ./src/.env
     container_name: fastapi_app
     expose:
       - "8000"

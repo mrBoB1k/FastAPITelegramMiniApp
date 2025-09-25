@@ -1,8 +1,7 @@
 from sqlalchemy import select
 from database import new_session
-from users.schemas import UserRegister, UserRoleEnum, TelegramId, UsersChangeRole, UsersBase
+from users.schemas import UserRegister, UserRoleEnum, UsersChangeRole, UsersBase
 from models import *
-from datetime import datetime
 
 
 class Repository:

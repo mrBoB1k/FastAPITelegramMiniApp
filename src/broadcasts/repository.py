@@ -1,8 +1,6 @@
 from sqlalchemy import select
 from database import new_session
-from broadcasts.schemas import SendGet, TelegramId
 from models import *
-from datetime import datetime
 from fastapi import HTTPException
 
 

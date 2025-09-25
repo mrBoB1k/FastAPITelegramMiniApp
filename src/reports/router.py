@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, StreamingResponse
-from typing import Annotated, Any, Type, Coroutine, List
-from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportGet, ExportEnum, DateTitleSH
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from typing import Annotated
+from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum
 from reports.repository import Repository
-from users.schemas import UserRoleEnum
-from datetime import datetime
 import io
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter

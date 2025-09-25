@@ -6,7 +6,6 @@ from interactivities.schemas import UserIdAndRole, InteractiveCreate, Interactiv
     Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull
 import random
 import string
-from typing import Optional
 
 
 class Repository:

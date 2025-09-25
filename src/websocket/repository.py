@@ -1,10 +1,8 @@
-from sqlalchemy import select, exists, desc
+from sqlalchemy import select, exists
 from database import new_session
 from models import *
-from datetime import datetime
-from sqlalchemy.sql import label
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, PutUserAnswers, \
-    Percentage, Answer as AnswerSchema, Winner, AnswerGet
+    Percentage, Winner, AnswerGet
 
 
 class Repository:

@@ -1,7 +1,4 @@
-from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
-import enum
 from users.schemas import UserRoleEnum
 
 class TelegramId(BaseModel):

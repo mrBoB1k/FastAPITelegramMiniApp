@@ -3,7 +3,6 @@ from typing import Annotated
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId,InteractiveCode, Interactive
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
-from datetime import datetime
 from websocket.router import manager as ws_router
 from websocket.InteractiveSession import Stage
 

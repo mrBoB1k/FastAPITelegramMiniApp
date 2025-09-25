@@ -1,10 +1,8 @@
-import asyncio
-
 from pydantic import json
 
 from users.schemas import UserRoleEnum
 from websocket.InteractiveSession import InteractiveSession, Stage
-from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
+from fastapi import WebSocket, WebSocketException
 from websocket.repository import Repository
 from websocket.schemas import LeaderSent, ParticipantSent, PutUserAnswers, WebSocketConnection, CreateQuizParticipant
 

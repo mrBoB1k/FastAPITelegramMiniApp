@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from broadcasts.schemas import SendGet, SendGet2
-from typing import Annotated
 from broadcasts.repository import Repository
 import asyncio
 from dotenv import load_dotenv

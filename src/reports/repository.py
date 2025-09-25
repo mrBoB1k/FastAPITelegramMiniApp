@@ -1,13 +1,10 @@
-from sqlalchemy import select, delete, and_
+from sqlalchemy import select, and_
 from database import new_session
 from models import *
 from datetime import datetime
-from reports.schemas import TelegramId, PreviewInteractive, InteractiveList, ExportForAnalise, ExportForLeaderData, \
+from reports.schemas import PreviewInteractive, InteractiveList, ExportForAnalise, ExportForLeaderData, \
     ExportForLeaderHeader, ExportForLeaderBody, QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer, \
     DateTitleSH
-import random
-import string
-from typing import Optional, List, Any, Type, Coroutine
 from fastapi import HTTPException
 
 
