@@ -274,3 +274,39 @@ class Repository:
 
             await session.commit()
             return InteractiveId(interactive_id=interactive_id)
+
+    @classmethod
+    async def delite_interactive(
+            cls,
+            interactive_id: int,
+    ) -> InteractiveId:
+        async with new_session() as session:
+            # 1. Получаем интерактив
+            interactive = await session.get(Interactive, interactive_id)
+            if not interactive:
+                raise ValueError(f"Интерактив с ID {interactive_id} не найден")
+
+            # 2. Удаляем все существующие ответы и вопросы
+            # Сначала удаляем ответы (из-за foreign key constraint)
+            await session.execute(
+                delete(Answer)
+                .where(Answer.question_id.in_(
+                    select(Question.id)
+                    .where(Question.interactive_id == interactive_id)
+                ))
+            )
+
+            # Затем удаляем вопросы
+            await session.execute(
+                delete(Question)
+                .where(Question.interactive_id == interactive_id)
+            )
+
+            # 3. Удаляем основные данные интерактива
+            await session.execute(
+                delete(Interactive)
+                .where(Interactive.id == interactive_id)
+            )
+
+            await session.commit()
+            return InteractiveId(interactive_id=interactive_id)
