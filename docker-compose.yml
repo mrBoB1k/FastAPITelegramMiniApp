@@ -1,9 +1,46 @@
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-myapp_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  backup:
+    image: postgres:15-alpine
+    profiles: [ "backup" ]  # запускается только когда нужно
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    command: |
+      bash -c "
+        pg_dump -h postgres -U $${DB_USER} -d $${DB_NAME} > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql
+        echo 'Backup completed'
+      "
+    environment:
+      - PGPASSWORD=${DB_PASSWORD}
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+
   fastapi_app:
     build:
       context: ./src
     env_file:
-      - ./src/.env
+      - .env
     container_name: fastapi_app
     expose:
       - "8000"
@@ -31,7 +68,7 @@ services:
     environment:
       - FASTAPI_URL=http://fastapi_app:8000
     env_file:
-      - ./bot/.env  # Только для BOT_TOKEN
+      - .env
     depends_on:
       - fastapi_app
     networks:
@@ -40,3 +77,6 @@ services:
 networks:
   app_network:
     driver: bridge
+
+volumes:
+  postgres_data:
