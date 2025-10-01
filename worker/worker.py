@@ -1,7 +1,7 @@
 import os
 import asyncio
 import redis
-from rq import Worker, Queue, Connection
+from rq import Worker, Queue
 from aiogram import Bot
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
 
@@ -79,8 +79,9 @@ if __name__ == "__main__":
         db=0
     )
 
-    # Запуск воркера
-    with Connection(redis_conn):
-        worker = Worker(['telegram_messages'])
-        print("✅ Worker started. Listening for messages...")
-        worker.work()
+    # Создаем и запускаем воркер с явным управлением соединением
+    queue = Queue('telegram_messages', connection=redis_conn)
+    worker = Worker([queue], connection=redis_conn)
+
+    print("✅ Worker started. Listening for messages...")
+    worker.work()
