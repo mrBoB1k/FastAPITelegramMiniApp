@@ -40,6 +40,8 @@ async def get_send(input_data: SendGet):
         )
         job_ids.append(job.id)
 
+    return {"status": "Сообщение отправлено"}
+
 #     x = 0
 #     for id in data_id:
 #         x+=1
@@ -68,12 +70,17 @@ async def get_queue_stats():
         "finished": len(message_queue.finished_job_registry)
     }
 
-#
-# @router.post('/test')
-# async def get_send(input_data: SendGet2):
-#     user_id = await Repository.get_user_id(input_data.telegram_id)
-#     if user_id is None:
-#         raise HTTPException(status_code=404, detail="User not found")
-#
-#     await send_telegram_message(input_data.text, input_data.telegram_id)
-#     return {"status": "Сообщение отправлено"}
+
+@router.post('/test')
+async def get_send(input_data: SendGet2):
+    user_id = await Repository.get_user_id(input_data.telegram_id)
+    if user_id is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    job = message_queue.enqueue(
+        'worker.send_telegram_message',  # Имя функции в воркере
+        args=(user_id, SendGet2.text),
+        job_timeout=300  # 5 минут timeout
+    )
+
+    return {"status": "Сообщение отправлено"}
