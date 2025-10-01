@@ -36,6 +36,15 @@ services:
     networks:
       - app_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_queue
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - app_network
+
   fastapi_app:
     build:
       context: ./src
@@ -45,6 +54,8 @@ services:
     expose:
       - "8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      - redis
     networks:
       - app_network
 
@@ -71,6 +82,20 @@ services:
       - .env
     depends_on:
       - fastapi_app
+      - redis
+    networks:
+      - app_network
+
+  rq_worker:
+    build:
+      context: ./worker
+    container_name: rq_worker
+    command: python -m worker
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - telegram_bot
     networks:
       - app_network
 

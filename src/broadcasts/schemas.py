@@ -18,3 +18,8 @@ class SendGet2(BaseModel):
 
 class TelegramId(BaseModel):
     telegram_id: int
+
+
+class BroadcastRequest(BaseModel):
+    message: str
+    user_ids: list[int]

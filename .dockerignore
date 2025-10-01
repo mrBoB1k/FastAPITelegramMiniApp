@@ -1,2 +1,6 @@
+__pycache__
+*.pyc
+.git
+.env
 .venv
-src/Dockerfile
+node_modules
