@@ -34,6 +34,20 @@ services:
     networks:
       - app_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_queue
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
   fastapi_app:
     build:
       context: ./src
@@ -48,6 +62,20 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  rq_worker:
+    build:
+      context: ./worker
+    container_name: rq_worker
+    command: python -m worker
+    env_file:
+      - .env
+    depends_on:
+      - redis
     networks:
       - app_network
 

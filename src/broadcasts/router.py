@@ -29,7 +29,7 @@ async def get_send(input_data: SendGet):
         data = await Repository.get_user_id_for_interactive_id(interactive_id_data.id, user_id)
         data_id = list(set(data_id + data))
 
-    request = BroadcastRequest(message= input_data.message, user_ids=data_id)
+    request = BroadcastRequest(message= input_data.text, user_ids=data_id)
 
     job_ids = []
     for user_id in request.user_ids:
@@ -79,7 +79,7 @@ async def get_send(input_data: SendGet2):
 
     job = message_queue.enqueue(
         'worker.send_telegram_message',  # Имя функции в воркере
-        args=(user_id, SendGet2.text),
+        args=(input_data.telegram_id, input_data.text),
         job_timeout=300  # 5 минут timeout
     )
 
