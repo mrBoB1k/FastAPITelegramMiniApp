@@ -149,9 +149,13 @@ async def delete_interactive(
     if conducted:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
 
-    if interactive_id.interactive_id in ws_router.interactive_sessions:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
+    if interactive_id.interactive_id in ws_router.interactive_sessions and conducted == False:
+        await ws_router.disconnect_delete(interactive_id.interactive_id)
 
     new_interactive_id = await Repository.delite_interactive(interactive_id=interactive_id.interactive_id)
 
     return new_interactive_id
+
+@router.get("/is_running/{interactive_id}")
+async def is_running(interactive_id: Annotated[InteractiveId, Depends()]):
+    return interactive_id.interactive_id in ws_router.interactive_sessions

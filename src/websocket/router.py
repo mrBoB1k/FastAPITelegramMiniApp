@@ -50,5 +50,4 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         await manager.disconnect(interactive_id, user_id, role)
     except Exception as e:
-        print(f"WebSocket error: {e}")
         await manager.disconnect(interactive_id, user_id, role)

@@ -118,3 +118,11 @@ class SessionManager:
 
         if interactive_id in self.active_connections:
             self.active_connections.pop(interactive_id)
+
+    async def disconnect_delete(self, interactive_id: int):
+        for conn in self.active_connections.pop(interactive_id):
+            await conn.websocket.close()
+            if conn.role == UserRoleEnum.participant:
+                await Repository.remove_participant_from_interactive(user_id=conn.user_id, interactive_id=interactive_id)
+
+        await self.interactive_sessions[interactive_id].stop()

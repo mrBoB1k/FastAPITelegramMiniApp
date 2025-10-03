@@ -98,6 +98,9 @@ class InteractiveSession:
             except asyncio.CancelledError:
                 pass  # Ожидаемое исключение при отмене задачи
             self.time_task = None
+            manager = self._manager_ref()
+            if manager is not None:
+                asyncio.create_task(manager.remove_session(self.interactive_id))
 
     def _task_done(self, task):
         manager = self._manager_ref()

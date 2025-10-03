@@ -1,4 +1,4 @@
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, delete
 from database import new_session
 from models import *
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, PutUserAnswers, \
@@ -248,3 +248,33 @@ class Repository:
             )
             count = result.scalar()
             return count
+
+    @classmethod
+    async def remove_participant_from_interactive(cls, user_id: int, interactive_id: int):
+        async with new_session() as session:
+            async with session.begin():
+                # Находим участника интерактива
+                participant_result = await session.execute(
+                    select(QuizParticipant)
+                    .where(QuizParticipant.user_id == user_id,
+                        QuizParticipant.interactive_id == interactive_id
+                    )
+                )
+                participant = participant_result.scalar_one_or_none()
+
+                if not participant:
+                    return
+
+                # Удаляем все ответы участника
+                await session.execute(delete(UserAnswer)
+                    .where(UserAnswer.participant_id == participant.id)
+                )
+
+                # Удаляем участника
+                await session.execute(
+                    delete(QuizParticipant)
+                    .where(QuizParticipant.id == participant.id)
+                )
+
+                await session.commit()
+                return
