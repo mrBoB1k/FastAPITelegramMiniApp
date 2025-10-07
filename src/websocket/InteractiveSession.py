@@ -3,7 +3,7 @@ import asyncio
 from enum import Enum
 from websocket.schemas import InteractiveInfo, InteractiveStatus, Question, StageCountdown, DataStageCountdown, \
     DataStageQuestion, StageQuestion, DataStageDiscussion, StageDiscussion, DataStageEnd, StageEnd, DataStageWaiting, \
-    StageWaiting, AnswerGet, Answer
+    StageWaiting, AnswerGet, Answer, InteractiveStatus, StatePause, DataPause
 from websocket.repository import Repository
 import weakref
 
@@ -47,6 +47,9 @@ class InteractiveSession:
         self.broadcast_callback = broadcast_callback  # callback для отправки сообщения
         self._manager_ref = weakref.ref(session_manager)
 
+        self.timer_n = 30*60
+        self.state = StatePause.yes
+
     async def get_stage(self) -> Stage:
         """Получение текущей фазы"""
         return self.stage
@@ -70,19 +73,35 @@ class InteractiveSession:
 
             if self.second_step == 1:
                 self.second_step = 0
+                self.timer_n = 10 * 60
+                self.state = StatePause.yes
             else:
                 self.second_step = 1
+                self.timer_n = 0
+                self.state = StatePause.no
+
 
         elif interactive_status == InteractiveStatus.going:
             if self.stage != Stage.WAITING or self.stage == Stage.END:
                 return
             self.waiting_timer_flag = False
+            self.timer_n = 0
+            self.state = StatePause.no
             return
 
         elif interactive_status == InteractiveStatus.end:
             if self.stage == Stage.END:
                 return
             self.stage = Stage.END
+
+        elif interactive_status == InteractiveStatus.more_pause:
+            if self.stage == Stage.WAITING:
+                self.timer_n = 30 * 60
+                self.state = StatePause.yes
+
+            elif (self.stage == Stage.QUESTION or self.stage == Stage.DISCUSSION) and self.second_step == 0:
+                self.timer_n = 10 * 60
+                self.state = StatePause.yes
 
         return
 
@@ -158,7 +177,20 @@ class InteractiveSession:
             participants_count = await  self.get_participants_count(self.interactive_id)
             data = DataStageWaiting(title=self.title, description=self.description, code=self.code,
                                     participants_active=participants_count)
-            result = StageWaiting(stage=stage_now, data=data)
+
+            self.timer_n -= 1
+            if self.timer_n <= 0:
+                if self.state == StatePause.yes:
+                    self.timer_n = 15*60
+                    self.state = StatePause.timer_n
+                elif self.state == StatePause.timer_n:
+                    manager = self._manager_ref()
+                    if manager is not None:
+                        asyncio.create_task(manager.disconnect_delete(self.interactive_id))
+
+            pause = DataPause(state= self.state, timer_n=self.timer_n)
+
+            result = StageWaiting(stage=stage_now, data=data, pause=pause)
             await self.broadcast_callback(self.interactive_id, result.model_dump())
         await self._change_stage(Stage.COUNTDOWN)
         return
@@ -182,10 +214,23 @@ class InteractiveSession:
             data = DataStageQuestion(questions_count=len(self.questions), timer=self.remaining_time,
                                      timer_duration=self.timer_duration, title=self.title, code=self.code,
                                      question=self.current_question, answers=answer)
-            result = StageQuestion(stage=stage_now, data=data)
+
+            if self.second_step == 0:
+                self.timer_n -= 1
+                if self.timer_n <= 0:
+                    if self.state == StatePause.yes:
+                        self.timer_n = 5 * 60
+                        self.state = StatePause.timer_n
+            pause = DataPause(state=self.state, timer_n=self.timer_n)
+
+            result = StageQuestion(stage=stage_now, data=data, pause = pause)
             await self.broadcast_callback(self.interactive_id, result.model_dump())
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
+
+            if self.second_step == 0 and self.timer_n <= 0 and self.state == StatePause.timer_n:
+                self.stage = Stage.END
+
         await self._change_stage(Stage.DISCUSSION)
         return
 
@@ -199,10 +244,22 @@ class InteractiveSession:
                                        timer_duration=self.timer_duration, title=self.title, code=self.code,
                                        question=self.current_question, id_correct_answer=id_correct_answer,
                                        percentages=percentages)
-            result = StageDiscussion(stage=stage_now, data=data)
+
+            if self.second_step == 0:
+                self.timer_n -= 1
+                if self.timer_n <= 0:
+                    if self.state == StatePause.yes:
+                        self.timer_n = 5 * 60
+                        self.state = StatePause.timer_n
+            pause = DataPause(state=self.state, timer_n=self.timer_n)
+
+            result = StageDiscussion(stage=stage_now, data=data, pause=pause)
             await self.broadcast_callback(self.interactive_id, result.model_dump())
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
+
+            if self.second_step == 0 and self.timer_n <= 0 and self.state == StatePause.timer_n:
+                self.stage = Stage.END
 
         await self._change_stage(Stage.QUESTION)
         return

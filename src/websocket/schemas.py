@@ -3,6 +3,7 @@ import enum
 from users.schemas import UserRoleEnum
 from fastapi import WebSocket
 
+
 class Stage(str, enum.Enum):
     waiting = "waiting"
     countdown = "countdown"
@@ -15,6 +16,22 @@ class InteractiveStatus(str, enum.Enum):
     pause = "pause"
     going = "going"
     end = "end"
+    more_pause = "more_pause"
+
+
+class StatePause(str, enum.Enum):
+    no = "no"
+    yes = "yes"
+    timer_n = "timer_n"
+
+
+class DataPause(BaseModel):
+    state: StatePause
+    timer_n: int
+
+
+class Pause(BaseModel):
+    pause: DataPause
 
 
 class UserConnectWSInfo(BaseModel):
@@ -43,6 +60,7 @@ class DataStageWaiting(BaseModel):
 class StageWaiting(BaseModel):
     stage: Stage
     data: DataStageWaiting
+    pause: DataPause
 
 
 class DataStageCountdown(BaseModel):
@@ -64,8 +82,10 @@ class Answer(BaseModel):
     id: int
     text: str
 
+
 class AnswerGet(Answer):
     is_correct: bool
+
 
 class DataStageQuestion(BaseModel):
     questions_count: int
@@ -80,6 +100,7 @@ class DataStageQuestion(BaseModel):
 class StageQuestion(BaseModel):
     stage: Stage
     data: DataStageQuestion
+    pause: DataPause
 
 
 class Percentage(BaseModel):
@@ -101,6 +122,7 @@ class DataStageDiscussion(BaseModel):
 class StageDiscussion(BaseModel):
     stage: Stage
     data: DataStageDiscussion
+    pause: DataPause
 
 
 class Winner(BaseModel):
