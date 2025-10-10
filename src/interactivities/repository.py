@@ -310,3 +310,35 @@ class Repository:
 
             await session.commit()
             return InteractiveId(interactive_id=interactive_id)
+
+    @classmethod
+    async def remove_participant_from_interactive(cls, interactive_id: int):
+        async with new_session() as session:
+            async with session.begin():
+                # Находим всех участников интерактива
+                participants_result = await session.execute(
+                    select(QuizParticipant)
+                    .where(QuizParticipant.interactive_id == interactive_id)
+                )
+                participants = participants_result.scalars().all()
+
+                if not participants:
+                    return
+
+                # Собираем ID всех участников для удаления ответов
+                participant_ids = [participant.id for participant in participants]
+
+                # Удаляем все ответы участников этого интерактива
+                await session.execute(
+                    delete(UserAnswer)
+                    .where(UserAnswer.participant_id.in_(participant_ids))
+                )
+
+                # Удаляем всех участников интерактива
+                await session.execute(
+                    delete(QuizParticipant)
+                    .where(QuizParticipant.interactive_id == interactive_id)
+                )
+
+                await session.commit()
+                return

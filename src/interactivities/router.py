@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Annotated
-from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId,InteractiveCode, Interactive
+from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
+    InteractiveCode, Interactive
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from websocket.router import manager as ws_router
@@ -10,6 +11,7 @@ router = APIRouter(
     prefix="/api/interactivities",
     tags=["/api/interactivities"]
 )
+
 
 @router.post("/")
 async def creat_interactive(
@@ -39,8 +41,8 @@ async def creat_interactive(
     interactive_id = await Repository.create_interactive(
         InteractiveCreate(
             **interactive.model_dump(),
-            code = code,
-            created_by_id = user_id
+            code=code,
+            created_by_id=user_id
         )
     )
     return interactive_id
@@ -48,7 +50,7 @@ async def creat_interactive(
 
 @router.get("/me")
 async def get_me(
-    telegram_id: Annotated[TelegramId, Depends()],
+        telegram_id: Annotated[TelegramId, Depends()],
 ) -> MyInteractives:
     user_id = await Repository.get_user_id(telegram_id.telegram_id)
     if user_id is None:
@@ -56,11 +58,13 @@ async def get_me(
     interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
     interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
 
-    return MyInteractives(interactives_list_conducted = interactives_list_conducted, interactives_list_not_conducted= interactives_list_not_conducted)
+    return MyInteractives(interactives_list_conducted=interactives_list_conducted,
+                          interactives_list_not_conducted=interactives_list_not_conducted)
+
 
 @router.get("/join")
 async def get_join_interactives(
-    code: Annotated[InteractiveCode, Depends()],
+        code: Annotated[InteractiveCode, Depends()],
 ) -> InteractiveId:
     interactive_id = await Repository.check_code_exists(code.code)
     if interactive_id is None:
@@ -69,6 +73,7 @@ async def get_join_interactives(
         if await ws_router.interactive_sessions[interactive_id].get_stage() != Stage.WAITING:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
     return InteractiveId(interactive_id=interactive_id)
+
 
 @router.get("/{interactive_id}")
 async def get_interactive(
@@ -88,6 +93,7 @@ async def get_interactive(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
 
     return info
+
 
 @router.patch("/{interactive_id}")
 async def patch_interactive(
@@ -124,9 +130,11 @@ async def patch_interactive(
     if interactive_id.interactive_id in ws_router.interactive_sessions:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
 
-    new_interactive_id = await Repository.update_interactive(interactive_id=interactive_id.interactive_id, data=interactive)
+    new_interactive_id = await Repository.update_interactive(interactive_id=interactive_id.interactive_id,
+                                                             data=interactive)
 
     return new_interactive_id
+
 
 @router.delete("/{interactive_id}")
 async def delete_interactive(
@@ -152,9 +160,13 @@ async def delete_interactive(
     if interactive_id.interactive_id in ws_router.interactive_sessions and conducted == False:
         await ws_router.disconnect_delete(interactive_id.interactive_id)
 
+    else:
+        await Repository.remove_participant_from_interactive(interactive_id=interactive_id.interactive_id)
+
     new_interactive_id = await Repository.delite_interactive(interactive_id=interactive_id.interactive_id)
 
     return new_interactive_id
+
 
 @router.get("/is_running/{interactive_id}")
 async def is_running(interactive_id: Annotated[InteractiveId, Depends()]):
