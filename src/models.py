@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, BigInteger, Text, Boolean, ForeignKey, TIMESTAMP, func
+    Column, Integer, BigInteger, Text, Boolean, ForeignKey, TIMESTAMP, func, JSON
 )
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import declarative_base, relationship
@@ -54,7 +54,18 @@ class Question(AsyncAttrs, Base):
     interactive_id = Column(Integer, ForeignKey("interactives.id"))
     text = Column(Text, nullable=False)
     position = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)
+    type = Column(Text, nullable=False)
+    image_id = Column(Integer, ForeignKey("images.id"), nullable=True)
 
+class Image(AsyncAttrs, Base):
+    __tablename__ = 'images'
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(Text, nullable=False)
+    content_type = Column(Text, nullable=False)
+    size = Column(BigInteger, nullable=False)
+    bucket_name = Column(Text, nullable=False)
 
 class Answer(AsyncAttrs, Base):
     __tablename__ = 'answers'
@@ -72,6 +83,7 @@ class QuizParticipant(AsyncAttrs, Base):
     interactive_id = Column(Integer, ForeignKey("interactives.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     joined_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    total_time = Column(Integer, nullable=False)
 
 
 class UserAnswer(AsyncAttrs, Base):
@@ -80,9 +92,49 @@ class UserAnswer(AsyncAttrs, Base):
     id = Column(Integer, primary_key=True)
     participant_id = Column(Integer, ForeignKey("quiz_participants.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
-    answer_id = Column(Integer, ForeignKey("answers.id"))
+    answer_data = Column(JSON, nullable=False)
     answered_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    time = Column(Integer, nullable=False)
 
+    @property
+    def answer_type(self):
+        return self.answer_data.get('type')
+
+    @property
+    def selected_answer_ids(self):
+        """Универсальный метод получения ID ответов"""
+        if self.answer_type == 'one':
+            return [self.answer_data.get('answer_id')]
+        elif self.answer_type == 'many':
+            return self.answer_data.get('answer_ids', [])
+        elif self.answer_type == 'text':
+            matched_id = self.answer_data.get('matched_answer_id')
+            return [matched_id] if matched_id else []
+        return []
+
+    @property
+    def text_answer(self):
+        """Для текстовых ответов"""
+        return self.answer_data.get('answer_text') if self.answer_type == 'text' else None
+
+    def set_single_choice(self, answer_id):
+        self.answer_data = {
+            "type": "one",
+            "answer_id": answer_id
+        }
+
+    def set_multiple_choice(self, answer_ids):
+        self.answer_data = {
+            "type": "many",
+            "answer_ids": answer_ids
+        }
+
+    def set_text_answer(self, answer_text, matched_answer_id=None):
+        self.answer_data = {
+            "type": "text",
+            "answer_text": answer_text,
+            "matched_answer_id": matched_answer_id
+        }
 
 class RoleChange(AsyncAttrs, Base):
     __tablename__ = 'role_changes'
