@@ -27,7 +27,7 @@ class Repository:
             result = await session.execute(
                 select(Interactive.id).where(Interactive.code == code, Interactive.conducted == False)
             )
-            return result.scalar_one_or_none()
+            return result.scalar_one_or_none()  is not None
 
     @classmethod
     async def generate_unique_code(cls, length: int = 6) -> str:

@@ -3,7 +3,7 @@ from minio.error import S3Error
 import io
 from fastapi import UploadFile, HTTPException
 import os
-from minios3.schemas import Image
+from minios3.schemas import ImageModel
 
 # Конфигурация MinIO
 minio_client = Minio(
@@ -13,8 +13,7 @@ minio_client = Minio(
     secure=False
 )
 
-
-async def save_image_to_minio(file: UploadFile, filename: str) -> Image:
+async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, content_type: str, size: int) -> ImageModel:
     bucket_name = "images"
 
     # Создаем бакет если не существует
@@ -24,20 +23,19 @@ async def save_image_to_minio(file: UploadFile, filename: str) -> Image:
     except S3Error as exc:
         raise HTTPException(status_code=500, detail=f"Error creating bucket: {exc}")
 
-    # Читаем файл
-    contents = await file.read()
-    file_size = len(contents)
-
     # Загружаем в MinIO
     try:
         minio_client.put_object(
             bucket_name=bucket_name,
-            object_name=filename,
-            data=io.BytesIO(contents),
-            length=file_size,
-            content_type=file.content_type
+            object_name=unique_filename,
+            data=io.BytesIO(file),
+            length=size,
+            content_type=content_type,
+            metadata={
+                "original-filename": filename
+            }
         )
     except S3Error as exc:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {exc}")
 
-    return Image(filename=filename, content_type=file.content_type,size=file_size, bucket_name=bucket_name)
+    return ImageModel(filename=filename, unique_filename=unique_filename, content_type=content_type,size=size, bucket_name=bucket_name)

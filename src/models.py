@@ -63,6 +63,7 @@ class Image(AsyncAttrs, Base):
 
     id = Column(Integer, primary_key=True)
     filename = Column(Text, nullable=False)
+    unique_filename = Column(Text, nullable=False, unique=True)
     content_type = Column(Text, nullable=False)
     size = Column(BigInteger, nullable=False)
     bucket_name = Column(Text, nullable=False)
