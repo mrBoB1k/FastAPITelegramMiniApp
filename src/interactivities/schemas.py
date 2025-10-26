@@ -37,6 +37,32 @@ class Interactive(BaseModel):
     countdown_duration: int
     questions: list[Question]
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Quiz about Python",
+                "description": "Интерактивная викторина о языке Python",
+                "target_audience": "Студенты",
+                "location": "Онлайн",
+                "responsible_full_name": "Иван Иванов",
+                "answer_duration": 30,
+                "discussion_duration": 15,
+                "countdown_duration": 5,
+                "questions": [
+                    {
+                        "text": "Что делает функция len()?",
+                        "position": 1,
+                        "type": "one",
+                        "image": "",
+                        "score": 10,
+                        "answers": [
+                            {"text": "Возвращает длину объекта", "is_correct": True},
+                            {"text": "Создает новый список", "is_correct": False}
+                        ]
+                    }
+                ]
+            }
+        }
 
 class ReceiveInteractive(BaseModel):
     telegram_id: int

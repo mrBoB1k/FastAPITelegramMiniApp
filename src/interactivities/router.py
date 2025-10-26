@@ -1,22 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile
-from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
+from typing import Annotated, List, Optional
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
     InteractiveCode, Interactive
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from websocket.router import manager as ws_router
 from websocket.InteractiveSession import Stage
+import json
+from pydantic import ValidationError
 
 router = APIRouter(
     prefix="/api/interactivities",
     tags=["/api/interactivities"]
 )
 
-@router.post("/")
+
+@router.post(
+    "/",
+    summary="Создание интерактива",
+    description=(
+            "Создаёт новый интерактив.\n\n"
+            "⚠️ Поле `interactivitie` должно содержать JSON, соответствующий схеме `Interactive`.\n\n"
+            "🧩 Пример:\n"
+            f"```json\n{json.dumps(Interactive.Config.json_schema_extra['example'], ensure_ascii=False, indent=2)}\n```"
+    )
+)
 async def creat_interactive(
-        interactivitie: Annotated[ReceiveInteractive, Depends()],
-        image: list[UploadFile]
+        telegram_id: int = Form(..., description="ID пользователя Telegram"),
+        interactive: str = Form(..., description="JSON объекта `Interactive`"),
+        images: Optional[List[UploadFile]] = File(default=None, description="Список изображений (может отсутствовать)")
 ):
+    try:
+        interactive_data = json.loads(interactive)
+        interactive = Interactive(**interactive_data)
+    except Exception as e:
+        return {"error": str(e)}
+
+    return {
+        "status": "ok",
+        "telegram_id": telegram_id,
+        "interactive": interactive,
+        "images_uploaded": len(images) if images else 0
+    }
     # user_id_role = await Repository.get_user_id_and_role_by_telegram_id(interactivitie.telegram_id)
     # if user_id_role is None:
     #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -47,8 +72,6 @@ async def creat_interactive(
     #     )
     # )
     # # переделать создание и добавить перед ним загрузку изображений
-
-    return {"status": "ok"}
 
 # @router.post("/")
 # async def creat_interactive(
