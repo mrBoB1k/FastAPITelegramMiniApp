@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
-    InteractiveCode, Interactive
+    InteractiveCode, Interactive, InteractiveType
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from websocket.router import manager as ws_router
@@ -29,49 +29,74 @@ async def creat_interactive(
         telegram_id: int = Form(..., description="ID пользователя Telegram"),
         interactive: str = Form(..., description="JSON объекта `Interactive`"),
         images: Optional[List[UploadFile]] = File(default=None, description="Список изображений (может отсутствовать)")
-):
+) -> InteractiveId:
     try:
         interactive_data = json.loads(interactive)
         interactive = Interactive(**interactive_data)
     except Exception as e:
         return {"error": str(e)}
 
-    return {
-        "status": "ok",
-        "telegram_id": telegram_id,
-        "interactive": interactive,
-        "images_uploaded": len(images) if images else 0
-    }
-    # user_id_role = await Repository.get_user_id_and_role_by_telegram_id(interactivitie.telegram_id)
-    # if user_id_role is None:
-    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    # if user_id_role.role != UserRoleEnum.leader:
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
-    #
-    # user_id = user_id_role.user_id
-    # interactive = interactivitie.interactive
-    #
-    # for i, question in enumerate(interactive.questions):
-    #     if question.position != i + 1:
-    #         raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
-    #     if len(question.answers) > 4:
-    #         raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text}")
-    #     correct_answers = [a for a in question.answers if a.is_correct]
-    #     if len(correct_answers) != 1:
-    #         raise HTTPException(status_code=400,
-    #                             detail=f"There must be exactly one correct answer in question {question.text}")
-    #     # добавить логику проверки типов
-    #
-    # code = await Repository.generate_unique_code()
-    #
-    # interactive_id = await Repository.create_interactive(
-    #     InteractiveCreate(
-    #         **interactive.model_dump(),
-    #         code=code,
-    #         created_by_id=user_id
-    #     )
-    # )
-    # # переделать создание и добавить перед ним загрузку изображений
+    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id)
+    if user_id_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_id_role.role != UserRoleEnum.leader:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
+
+    user_id = user_id_role.user_id
+
+    count_images = 0
+
+    for i, question in enumerate(interactive.questions):
+        if question.position != i + 1:
+            raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
+
+        count_answers = len(question.answers)
+
+        if question.image is not None and question.image == "image":
+            count_images += 1
+
+        if question.type == InteractiveType.one:
+            if count_answers > 5 or count_answers == 0:
+                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+            correct_answers = [a for a in question.answers if a.is_correct]
+            count_correct_answers = len(correct_answers)
+            if count_correct_answers != 1:
+                raise HTTPException(status_code=400,
+                                    detail=f"There must be one correct answer in a question {question.text} of type {question.type}.")
+
+        if question.type == InteractiveType.many:
+            if count_answers > 5 or count_answers == 0:
+                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+            correct_answers = [a for a in question.answers if a.is_correct]
+            count_correct_answers = len(correct_answers)
+            if count_correct_answers < 2:
+                raise HTTPException(status_code=400,
+                                    detail=f"A question {question.text} of type {question.type} must have more than one correct answer.")
+
+        if question.type == InteractiveType.text:
+            if count_answers > 3 or count_answers == 0:
+                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+            correct_answers = [a for a in question.answers if a.is_correct]
+            count_correct_answers = len(correct_answers)
+            if count_correct_answers != count_answers:
+                raise HTTPException(status_code=400,
+                                    detail=f"A question {question.text} of type {question.type} all answers must be correct")
+
+    if images is not None and count_images != len(images):
+            raise HTTPException(status_code=400, detail="fewer images were received than expected")
+
+    code = await Repository.generate_unique_code()
+
+    interactive_id = await Repository.create_interactive(
+        InteractiveCreate(
+            **interactive.model_dump(),
+            code=code,
+            created_by_id=user_id
+        ),
+        images
+    )
+    return interactive_id
+    # переделать создание и добавить перед ним загрузку изображений
 
 # @router.post("/")
 # async def creat_interactive(

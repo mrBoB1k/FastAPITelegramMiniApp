@@ -8,7 +8,6 @@ from users.router import router as user_router
 from interactivities.router import router as interactivity_router
 # from reports.router import router as report_router
 # from broadcasts.router import router as broadcast_router
-from minios3.router import router as minios3_router
 
 from dotenv import load_dotenv
 import os
@@ -44,7 +43,6 @@ app.add_middleware(
 )
 
 app.include_router(user_router)
-app.include_router(minios3_router)
 app.include_router(interactivity_router)
 # app.include_router(websocket_router)
 # app.include_router(report_router)

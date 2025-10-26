@@ -2,6 +2,14 @@ from pydantic import BaseModel
 from users.schemas import UserRoleEnum
 from fastapi import UploadFile
 
+import enum
+
+
+class InteractiveType(str, enum.Enum):
+    one = "one"
+    many = "many"
+    text = "text"
+
 
 class TelegramId(BaseModel):
     telegram_id: int
@@ -20,7 +28,7 @@ class Answer(BaseModel):
 class Question(BaseModel):
     text: str
     position: int
-    type: str
+    type: InteractiveType
     image: str
     score: int
     answers: list[Answer]

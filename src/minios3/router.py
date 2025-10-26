@@ -4,17 +4,12 @@ import minios3.services as services
 from minios3.schemas import ImageModel
 from minios3.repository import Repository
 
-router = APIRouter(
-    prefix="/api/test",
-    tags=["/api/test"]
-)
-
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-@router.post("/upload2")
+
 async def create_file(
-    image: UploadFile,
-):
+        image: UploadFile,
+) -> int:
     # Проверка размера
     file_size = image.size
     content_type = image.content_type
@@ -59,4 +54,4 @@ async def create_file(
 
     id = await Repository.save_image_metadata(image_data)
 
-    return {"id":id,"unique_filename":unique_filename, "filename":filename}
+    return id

@@ -6,7 +6,8 @@ from interactivities.schemas import UserIdAndRole, InteractiveCreate, Interactiv
     Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull
 import random
 import string
-
+from fastapi import UploadFile
+from minios3.router import create_file
 
 class Repository:
     @classmethod
@@ -39,7 +40,7 @@ class Repository:
                 return code
 
     @classmethod
-    async def create_interactive(cls, data: InteractiveCreate) -> InteractiveId:
+    async def create_interactive(cls, data: InteractiveCreate, images: list[UploadFile] | None) -> InteractiveId:
         async with new_session() as session:
             interactive_full_dict = data.model_dump()
             questions_list = interactive_full_dict.pop('questions')
@@ -49,11 +50,21 @@ class Repository:
             session.add(new_interactive)
             await session.flush()
 
+            count_image = 0
+
             for question in questions_list:
+                image = None
+                if question["image"] == "image":
+                    image = await create_file(images[count_image])
+                    count_image += 1
+
                 new_question = Question(
                     interactive_id=new_interactive.id,
                     text=question['text'],
-                    position=question['position']
+                    position=question['position'],
+                    score=question['score'],
+                    type=question['type'],
+                    image_id=image
                 )
                 session.add(new_question)
                 await session.flush()
