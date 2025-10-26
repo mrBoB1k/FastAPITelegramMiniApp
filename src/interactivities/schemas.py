@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from users.schemas import UserRoleEnum
 from fastapi import UploadFile
 
+
 class TelegramId(BaseModel):
     telegram_id: int
 
@@ -14,17 +15,15 @@ class UserIdAndRole(BaseModel):
 class Answer(BaseModel):
     text: str
     is_correct: bool
-# question_id
 
 
 class Question(BaseModel):
     text: str
     position: int
-    answers: list[Answer]
     type: str
-    image: UploadFile
+    image: str
     score: int
-# interactive_id
+    answers: list[Answer]
 
 
 class Interactive(BaseModel):
@@ -37,7 +36,6 @@ class Interactive(BaseModel):
     discussion_duration: int
     countdown_duration: int
     questions: list[Question]
-# code created_by_id created_at conducted
 
 
 class ReceiveInteractive(BaseModel):

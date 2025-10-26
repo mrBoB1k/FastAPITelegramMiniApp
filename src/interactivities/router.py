@@ -17,6 +17,37 @@ async def creat_interactive(
         interactivitie: Annotated[ReceiveInteractive, Depends()],
         image: list[UploadFile]
 ):
+    # user_id_role = await Repository.get_user_id_and_role_by_telegram_id(interactivitie.telegram_id)
+    # if user_id_role is None:
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # if user_id_role.role != UserRoleEnum.leader:
+    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
+    #
+    # user_id = user_id_role.user_id
+    # interactive = interactivitie.interactive
+    #
+    # for i, question in enumerate(interactive.questions):
+    #     if question.position != i + 1:
+    #         raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
+    #     if len(question.answers) > 4:
+    #         raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text}")
+    #     correct_answers = [a for a in question.answers if a.is_correct]
+    #     if len(correct_answers) != 1:
+    #         raise HTTPException(status_code=400,
+    #                             detail=f"There must be exactly one correct answer in question {question.text}")
+    #     # добавить логику проверки типов
+    #
+    # code = await Repository.generate_unique_code()
+    #
+    # interactive_id = await Repository.create_interactive(
+    #     InteractiveCreate(
+    #         **interactive.model_dump(),
+    #         code=code,
+    #         created_by_id=user_id
+    #     )
+    # )
+    # # переделать создание и добавить перед ним загрузку изображений
+
     return {"status": "ok"}
 
 # @router.post("/")
