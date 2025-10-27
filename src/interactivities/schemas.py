@@ -4,6 +4,12 @@ from fastapi import UploadFile
 
 import enum
 
+class MinioData(BaseModel):
+    file: bytes
+    filename: str
+    unique_filename: str
+    content_type: str
+    size: int
 
 class InteractiveType(str, enum.Enum):
     one = "one"

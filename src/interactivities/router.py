@@ -1,18 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
-    InteractiveCode, Interactive, InteractiveType
+    InteractiveCode, Interactive, InteractiveType, MinioData
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from websocket.router import manager as ws_router
 from websocket.InteractiveSession import Stage
 import json
 from pydantic import ValidationError
+import minios3.services as services
+
 
 router = APIRouter(
     prefix="/api/interactivities",
     tags=["/api/interactivities"]
 )
+
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
 @router.post(
@@ -57,7 +61,8 @@ async def creat_interactive(
 
         if question.type == InteractiveType.one:
             if count_answers > 5 or count_answers == 0:
-                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+                raise HTTPException(status_code=400,
+                                    detail=f"Too many answers for question {question.text} of type {question.type}")
             correct_answers = [a for a in question.answers if a.is_correct]
             count_correct_answers = len(correct_answers)
             if count_correct_answers != 1:
@@ -66,7 +71,8 @@ async def creat_interactive(
 
         if question.type == InteractiveType.many:
             if count_answers > 5 or count_answers == 0:
-                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+                raise HTTPException(status_code=400,
+                                    detail=f"Too many answers for question {question.text} of type {question.type}")
             correct_answers = [a for a in question.answers if a.is_correct]
             count_correct_answers = len(correct_answers)
             if count_correct_answers < 2:
@@ -75,15 +81,71 @@ async def creat_interactive(
 
         if question.type == InteractiveType.text:
             if count_answers > 3 or count_answers == 0:
-                raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text} of type {question.type}")
+                raise HTTPException(status_code=400,
+                                    detail=f"Too many answers for question {question.text} of type {question.type}")
             correct_answers = [a for a in question.answers if a.is_correct]
             count_correct_answers = len(correct_answers)
             if count_correct_answers != count_answers:
                 raise HTTPException(status_code=400,
                                     detail=f"A question {question.text} of type {question.type} all answers must be correct")
 
-    if images is not None and count_images != len(images):
+    images_data_first = []
+    images_data_second = []
+    if images is None and count_images > 0:
+        raise HTTPException(status_code=400, detail="fewer images were received than expected")
+    if images is not None:
+        if count_images != len(images):
             raise HTTPException(status_code=400, detail="fewer images were received than expected")
+
+        for image in images:
+
+            file_size = image.size
+            content_type = image.content_type
+
+            if file_size > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File size exceeds 5 MB limit"
+                )
+
+            # Проверка, что это изображение
+            if not content_type or not content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid content type: {content_type}. Only images are allowed."
+                )
+
+            # Определяем расширение из MIME-типа
+            mime_to_ext = {
+                "image/jpeg": "jpg",
+                "image/png": "png",
+                "image/gif": "gif",
+                "image/webp": "webp",
+                "image/bmp": "bmp",
+                "image/tiff": "tiff",
+                "image/svg+xml": "svg"
+            }
+            ext = mime_to_ext.get(content_type, "bin")
+
+            # Генерируем уникальное имя файла
+            unique_filename = await Repository.generate_unique_filename(ext)
+            filename = image.filename
+
+            data = MinioData(file=await image.read(), filename=filename, unique_filename=unique_filename,
+                             content_type=content_type, size=file_size)
+
+            images_data_first.append(data)
+
+        for image_data_first in images_data_first:
+            image_data_second = await services.save_image_to_minio(
+                file=image_data_first.file,
+                filename=image_data_first.filename,
+                unique_filename=image_data_first.unique_filename,
+                content_type=image_data_first.content_type,
+                size=image_data_first.size
+            )
+            images_data_second.append(image_data_second)
+
 
     code = await Repository.generate_unique_code()
 
@@ -93,60 +155,24 @@ async def creat_interactive(
             code=code,
             created_by_id=user_id
         ),
-        images
+        images_data_second
     )
     return interactive_id
-    # переделать создание и добавить перед ним загрузку изображений
 
-# @router.post("/")
-# async def creat_interactive(
-#         interactivitie: Annotated[ReceiveInteractive, Depends()],
-# ) -> InteractiveId:
-#     user_id_role = await Repository.get_user_id_and_role_by_telegram_id(interactivitie.telegram_id)
-#     if user_id_role is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     if user_id_role.role != UserRoleEnum.leader:
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
-#
-#     user_id = user_id_role.user_id
-#     interactive = interactivitie.interactive
-#
-#     for i, question in enumerate(interactive.questions):
-#         if question.position != i + 1:
-#             raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
-#         if len(question.answers) > 4:
-#             raise HTTPException(status_code=400, detail=f"Too many answers for question {question.text}")
-#         correct_answers = [a for a in question.answers if a.is_correct]
-#         if len(correct_answers) != 1:
-#             raise HTTPException(status_code=400,
-#                                 detail=f"There must be exactly one correct answer in question {question.text}")
-#
-#     code = await Repository.generate_unique_code()
-#
-#     interactive_id = await Repository.create_interactive(
-#         InteractiveCreate(
-#             **interactive.model_dump(),
-#             code=code,
-#             created_by_id=user_id
-#         )
-#     )
-#     return interactive_id
-#
+@router.get("/me")
+async def get_me(
+        telegram_id: Annotated[TelegramId, Depends()],
+) -> MyInteractives:
+    user_id = await Repository.get_user_id(telegram_id.telegram_id)
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
+    interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
 
-# @router.get("/me")
-# async def get_me(
-#         telegram_id: Annotated[TelegramId, Depends()],
-# ) -> MyInteractives:
-#     user_id = await Repository.get_user_id(telegram_id.telegram_id)
-#     if user_id is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
-#     interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
-#
-#     return MyInteractives(interactives_list_conducted=interactives_list_conducted,
-#                           interactives_list_not_conducted=interactives_list_not_conducted)
-#
-#
+    return MyInteractives(interactives_list_conducted=interactives_list_conducted,
+                          interactives_list_not_conducted=interactives_list_not_conducted)
+
+
 # @router.get("/join")
 # async def get_join_interactives(
 #         code: Annotated[InteractiveCode, Depends()],
@@ -158,8 +184,8 @@ async def creat_interactive(
 #         if await ws_router.interactive_sessions[interactive_id].get_stage() != Stage.WAITING:
 #             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
 #     return InteractiveId(interactive_id=interactive_id)
-#
-#
+
+
 # @router.get("/{interactive_id}")
 # async def get_interactive(
 #         interactive_id: Annotated[InteractiveId, Depends()],

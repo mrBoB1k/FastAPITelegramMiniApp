@@ -4,10 +4,10 @@ from models import *
 from datetime import datetime
 from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, InteractiveConducted, \
     Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull
+from minios3.schemas import ImageModel
 import random
 import string
-from fastapi import UploadFile
-from minios3.router import create_file
+import uuid
 
 class Repository:
     @classmethod
@@ -28,7 +28,7 @@ class Repository:
             result = await session.execute(
                 select(Interactive.id).where(Interactive.code == code, Interactive.conducted == False)
             )
-            return result.scalar_one_or_none()  is not None
+            return result.scalar_one_or_none() is not None
 
     @classmethod
     async def generate_unique_code(cls, length: int = 6) -> str:
@@ -40,7 +40,7 @@ class Repository:
                 return code
 
     @classmethod
-    async def create_interactive(cls, data: InteractiveCreate, images: list[UploadFile] | None) -> InteractiveId:
+    async def create_interactive(cls, data: InteractiveCreate, images: list[ImageModel] | None) -> InteractiveId:
         async with new_session() as session:
             interactive_full_dict = data.model_dump()
             questions_list = interactive_full_dict.pop('questions')
@@ -55,7 +55,11 @@ class Repository:
             for question in questions_list:
                 image = None
                 if question["image"] == "image":
-                    image = await create_file(images[count_image])
+                    image_dict = images[count_image].model_dump()
+                    image = Image(**image_dict)
+                    session.add(image)
+                    image = image.id
+                    await session.flush()
                     count_image += 1
 
                 new_question = Question(
@@ -80,6 +84,22 @@ class Repository:
 
             await session.commit()
             return InteractiveId(interactive_id=new_interactive.id)
+
+    @classmethod
+    async def check_filename_exists(cls, unique_filename: str) -> bool:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Image.id).where(Image.unique_filename == unique_filename)
+            )
+            exists = result.scalar_one_or_none() is not None
+            return exists
+
+    @classmethod
+    async def generate_unique_filename(cls, ext: str) -> str:
+        while True:
+            unique_filename = f"{uuid.uuid4()}.{ext}"
+            if not await cls.check_filename_exists(unique_filename):
+                return unique_filename
 
     @classmethod
     async def get_user_id(cls, telegram_id: int) -> int | None:
