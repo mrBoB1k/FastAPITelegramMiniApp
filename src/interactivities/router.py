@@ -186,25 +186,25 @@ async def get_me(
 #     return InteractiveId(interactive_id=interactive_id)
 
 
-# @router.get("/{interactive_id}")
-# async def get_interactive(
-#         interactive_id: Annotated[InteractiveId, Depends()],
-#         telegram_id: Annotated[TelegramId, Depends()],
-# ) -> Interactive:
-#     user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
-#     if user_id_role is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     if user_id_role.role != UserRoleEnum.leader:
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get info interactives")
-#
-#     user_id = user_id_role.user_id
-#
-#     info = await Repository.get_all_interactive_info(user_id, interactive_id.interactive_id)
-#     if info is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
-#
-#     return info
-#
+@router.get("/{interactive_id}")
+async def get_interactive(
+        interactive_id: Annotated[InteractiveId, Depends()],
+        telegram_id: Annotated[TelegramId, Depends()],
+) -> Interactive:
+    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
+    if user_id_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_id_role.role != UserRoleEnum.leader:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get info interactives")
+
+    user_id = user_id_role.user_id
+
+    info = await Repository.get_all_interactive_info(user_id, interactive_id.interactive_id)
+    if info is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
+
+    return info
+
 #
 # @router.patch("/{interactive_id}")
 # async def patch_interactive(

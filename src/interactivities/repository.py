@@ -9,6 +9,7 @@ import random
 import string
 import uuid
 
+
 class Repository:
     @classmethod
     async def get_user_id_and_role_by_telegram_id(cls, telegram_id: int) -> UserIdAndRole | None:
@@ -58,8 +59,8 @@ class Repository:
                     image_dict = images[count_image].model_dump()
                     image = Image(**image_dict)
                     session.add(image)
-                    image = image.id
                     await session.flush()
+                    image = image.id
                     count_image += 1
 
                 new_question = Question(
@@ -220,12 +221,24 @@ class Repository:
                     )
                     for answer in answers
                 ]
+                image = ""
+                if question.image_id is not None:
+                    image_result = await session.execute(
+                        select(Image)
+                        .where(Image.id == question.image_id)
+                    )
+                    image_data = image_result.scalars().first()
+                    if image_data is not None:
+                        image = f"https://carclicker.ru/{image_data.bucket_name}/{image_data.unique_filename}"
 
                 questions_data.append(
                     QuestionFull(
                         text=question.text,
                         position=question.position,
-                        answers=answers_data
+                        answers=answers_data,
+                        type=question.type,
+                        image=image,
+                        score=question.score,
                     )
                 )
 
