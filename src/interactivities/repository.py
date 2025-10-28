@@ -8,6 +8,7 @@ from minios3.schemas import ImageModel
 import random
 import string
 import uuid
+from urllib.parse import urlparse
 
 
 class Repository:
@@ -29,7 +30,7 @@ class Repository:
             result = await session.execute(
                 select(Interactive.id).where(Interactive.code == code, Interactive.conducted == False)
             )
-            return result.scalar_one_or_none() is not None
+            return result.scalar_one_or_none()
 
     @classmethod
     async def generate_unique_code(cls, length: int = 6) -> str:
@@ -269,7 +270,8 @@ class Repository:
     async def update_interactive(
             cls,
             interactive_id: int,
-            data: Interactive
+            data: InteractiveFull,
+            images: list[ImageModel] | None
     ) -> InteractiveId:
         async with new_session() as session:
             # 1. Получаем интерактив
@@ -299,11 +301,36 @@ class Repository:
                 setattr(interactive, key, value)
 
             # 4. Создаем новые вопросы и ответы
+            count_image = 0
             for question_data in data.questions:
+                image = None
+                if question_data.image == "image":
+                    image_dict = images[count_image].model_dump()
+                    image = Image(**image_dict)
+                    session.add(image)
+                    await session.flush()
+                    image = image.id
+                    count_image += 1
+
+                elif question_data.image is not None and question_data.image != "":
+                    path_parts = urlparse(question_data.image).path.strip('/').split('/')
+
+                    bucket_name = path_parts[-2]
+                    unique_filename = path_parts[-1]
+                    result = await session.execute(
+                        select(Image.id).where(Image.unique_filename == unique_filename,
+                                               Image.bucket_name == bucket_name
+                                               )
+                    )
+                    image = result.scalar_one_or_none()
+
                 new_question = Question(
                     interactive_id=interactive_id,
                     text=question_data.text,
-                    position=question_data.position
+                    position=question_data.position,
+                    score=question_data.score,
+                    type=question_data.type,
+                    image_id=image
                 )
                 session.add(new_question)
                 await session.flush()  # Получаем ID нового вопроса
