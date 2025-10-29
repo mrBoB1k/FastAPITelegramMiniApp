@@ -63,6 +63,17 @@ class Repository:
                     await session.flush()
                     image = image.id
                     count_image += 1
+                elif question["image"] is not None and question["image"] != "":
+                    path_parts = urlparse(question["image"]).path.strip('/').split('/')
+
+                    bucket_name = path_parts[-2]
+                    unique_filename = path_parts[-1]
+                    result = await session.execute(
+                        select(Image.id).where(Image.unique_filename == unique_filename,
+                                               Image.bucket_name == bucket_name
+                                               )
+                    )
+                    image = result.scalar_one_or_none()
 
                 new_question = Question(
                     interactive_id=new_interactive.id,

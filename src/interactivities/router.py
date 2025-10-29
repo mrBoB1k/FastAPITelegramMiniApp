@@ -10,7 +10,6 @@ import json
 from pydantic import ValidationError
 import minios3.services as services
 
-
 router = APIRouter(
     prefix="/api/interactivities",
     tags=["/api/interactivities"]
@@ -146,18 +145,18 @@ async def creat_interactive(
             )
             images_data_second.append(image_data_second)
 
-
     code = await Repository.generate_unique_code()
 
     interactive_id = await Repository.create_interactive(
-        data = InteractiveCreate(
+        data=InteractiveCreate(
             **interactive.model_dump(),
             code=code,
             created_by_id=user_id
         ),
-        images = images_data_second
+        images=images_data_second
     )
     return interactive_id
+
 
 @router.get("/me")
 async def get_me(
@@ -219,7 +218,7 @@ async def get_interactive(
 async def patch_interactive(
         interactive_id: int = Annotated[InteractiveId, Depends()],
         telegram_id: int = Form(..., description="ID пользователя Telegram"),
-        interactive:  str = Form(..., description="JSON объекта `Interactive`"),
+        interactive: str = Form(..., description="JSON объекта `Interactive`"),
         images: Optional[List[UploadFile]] = File(default=None, description="Список изображений (может отсутствовать)")
 ) -> InteractiveId:
     try:
@@ -334,8 +333,6 @@ async def patch_interactive(
             )
             images_data_second.append(image_data_second)
 
-
-
     conducted = await Repository.get_interactive_conducted(interactive_id=interactive_id, user_id=user_id)
 
     if conducted is None:
@@ -350,7 +347,7 @@ async def patch_interactive(
     new_interactive_id = await Repository.update_interactive(interactive_id=interactive_id,
                                                              data=interactive,
                                                              images=images_data_second
-    )
+                                                             )
     return new_interactive_id
 
 #
