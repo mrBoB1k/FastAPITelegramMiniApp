@@ -39,3 +39,15 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
         raise HTTPException(status_code=500, detail=f"Error uploading file: {exc}")
 
     return ImageModel(filename=filename, unique_filename=unique_filename, content_type=content_type,size=size, bucket_name=bucket_name)
+
+
+async def delete_image_from_minio(unique_filename: str, bucket_name: str) -> str:
+    # Удаляем объекты из бакета MinIO
+    try:
+        minio_client.remove_object(
+            bucket_name=bucket_name,
+            object_name=unique_filename
+        )
+        return "True"
+    except S3Error as exc:
+        return f"{exc}"

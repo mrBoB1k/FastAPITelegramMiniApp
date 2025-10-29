@@ -1,3 +1,5 @@
+from typing import List
+
 from sqlalchemy import select, delete
 from database import new_session
 from models import *
@@ -9,6 +11,7 @@ import random
 import string
 import uuid
 from urllib.parse import urlparse
+import minios3.services as services
 
 
 class Repository:
@@ -290,8 +293,15 @@ class Repository:
             if not interactive:
                 raise ValueError(f"Интерактив с ID {interactive_id} не найден")
 
-            # 2. Удаляем все существующие ответы и вопросы
-            # Сначала удаляем ответы (из-за foreign key constraint)
+            # 2. Получаем все вопросы интерактива (до удаления)
+            old_questions_result = await session.execute(
+                select(Question.id, Question.image_id)
+                .where(Question.interactive_id == interactive_id)
+            )
+            old_questions = old_questions_result.all()
+            old_image_ids = {q.image_id for q in old_questions if q.image_id is not None}
+
+            # 3. Удаляем все ответы
             await session.execute(
                 delete(Answer)
                 .where(Answer.question_id.in_(
@@ -300,32 +310,36 @@ class Repository:
                 ))
             )
 
-            # Затем удаляем вопросы
+            # 4. Удаляем все вопросы
             await session.execute(
                 delete(Question)
                 .where(Question.interactive_id == interactive_id)
             )
 
-            # 3. Обновляем основные данные интерактива
+            # 5. Обновляем поля интерактива
             update_data = data.model_dump(exclude={"questions"})
             for key, value in update_data.items():
                 setattr(interactive, key, value)
 
-            # 4. Создаем новые вопросы и ответы
+            # 6. Создаём новые вопросы и ответы
             count_image = 0
+            new_image_ids = set()
             for question_data in data.questions:
-                image = None
+                image_id = None
+
+                # Если пришло новое изображение
                 if question_data.image == "image":
                     image_dict = images[count_image].model_dump()
                     image = Image(**image_dict)
                     session.add(image)
                     await session.flush()
-                    image = image.id
+                    image_id = image.id
+                    new_image_ids.add(image_id)
                     count_image += 1
 
-                elif question_data.image is not None and question_data.image != "":
+                # Если пришёл путь к существующему изображению
+                elif question_data.image:
                     path_parts = urlparse(question_data.image).path.strip('/').split('/')
-
                     bucket_name = path_parts[-2]
                     unique_filename = path_parts[-1]
                     result = await session.execute(
@@ -333,7 +347,9 @@ class Repository:
                                                Image.bucket_name == bucket_name
                                                )
                     )
-                    image = result.scalar_one_or_none()
+                    image_id = result.scalar_one_or_none()
+                    if image_id:
+                        new_image_ids.add(image_id)
 
                 new_question = Question(
                     interactive_id=interactive_id,
@@ -341,7 +357,7 @@ class Repository:
                     position=question_data.position,
                     score=question_data.score,
                     type=question_data.type,
-                    image_id=image
+                    image_id=image_id
                 )
                 session.add(new_question)
                 await session.flush()  # Получаем ID нового вопроса
@@ -354,6 +370,34 @@ class Repository:
                     )
                     session.add(new_answer)
 
+            # 7. Проверяем, какие старые изображения больше не используются
+            images_to_check = old_image_ids - new_image_ids
+            if images_to_check:
+                # Ищем, используются ли они где-то ещё
+                used_images_result = await session.execute(
+                    select(Question.image_id)
+                    .where(Question.image_id.in_(images_to_check))
+                )
+                still_used = {row.image_id for row in used_images_result if row.image_id is not None}
+                unused_image_ids = images_to_check - still_used
+
+                # Удаляем неиспользуемые
+                if unused_image_ids:
+                    images_result = await session.execute(
+                        select(Image).where(Image.id.in_(unused_image_ids))
+                    )
+                    unused_images: List[Image] = [row[0] for row in images_result]
+
+                    for image in unused_images:
+                        result_minion = await services.delete_image_from_minio(unique_filename=image.unique_filename,
+                                                                               bucket_name=image.bucket_name)
+                        if result_minion != "True":
+                            print(f"⚠️ Ошибка при удалении {image.unique_filename} из S3: {result_minion}")
+
+                    await session.execute(
+                        delete(Image).where(Image.id.in_(unused_image_ids))
+                    )
+
             await session.commit()
             return InteractiveId(interactive_id=interactive_id)
 
@@ -363,34 +407,68 @@ class Repository:
             interactive_id: int,
     ) -> InteractiveId:
         async with new_session() as session:
-            # 1. Получаем интерактив
+            # 1. Проверяем, существует ли интерактив
             interactive = await session.get(Interactive, interactive_id)
             if not interactive:
                 raise ValueError(f"Интерактив с ID {interactive_id} не найден")
 
-            # 2. Удаляем все существующие ответы и вопросы
-            # Сначала удаляем ответы (из-за foreign key constraint)
-            await session.execute(
-                delete(Answer)
-                .where(Answer.question_id.in_(
-                    select(Question.id)
-                    .where(Question.interactive_id == interactive_id)
-                ))
-            )
-
-            # Затем удаляем вопросы
-            await session.execute(
-                delete(Question)
+            # 2. Получаем вопросы интерактива
+            questions_result = await session.execute(
+                select(Question.id, Question.image_id)
                 .where(Question.interactive_id == interactive_id)
             )
+            questions = questions_result.all()
 
-            # 3. Удаляем основные данные интерактива
+            question_ids = [q.id for q in questions]
+            image_ids = {q.image_id for q in questions if q.image_id is not None}
+
+            # 3. Удаляем ответы
+            if question_ids:
+                await session.execute(
+                    delete(Answer).where(Answer.question_id.in_(question_ids))
+                )
+
+            # 4. Удаляем вопросы
             await session.execute(
-                delete(Interactive)
-                .where(Interactive.id == interactive_id)
+                delete(Question).where(Question.id.in_(question_ids))
+            )
+
+            # 5. Проверяем, какие изображения теперь можно удалить
+            if image_ids:
+                # Найдём изображения, больше нигде не используемые
+                used_images_result = await session.execute(
+                    select(Question.image_id)
+                    .where(Question.image_id.in_(image_ids))
+                )
+                used_image_ids = {row.image_id for row in used_images_result if row.image_id is not None}
+                unused_image_ids = image_ids - used_image_ids
+
+                if unused_image_ids:
+                    # Получаем данные об этих изображениях
+                    images_result = await session.execute(
+                        select(Image).where(Image.id.in_(unused_image_ids))
+                    )
+                    images_to_delete: List[Image] = [row[0] for row in images_result]
+
+                    # Удаляем объекты из бакета MinIO
+                    for image in images_to_delete:
+                        result_minion = await services.delete_image_from_minio(unique_filename=image.unique_filename,
+                                                                               bucket_name=image.bucket_name)
+                        if result_minion != "True":
+                            print(f"⚠️ Ошибка при удалении {image.unique_filename} из S3: {result_minion}")
+
+                    # Удаляем записи из таблицы Image
+                    await session.execute(
+                        delete(Image).where(Image.id.in_(unused_image_ids))
+                    )
+
+            # 6. Удаляем сам интерактив
+            await session.execute(
+                delete(Interactive).where(Interactive.id == interactive_id)
             )
 
             await session.commit()
+
             return InteractiveId(interactive_id=interactive_id)
 
     @classmethod

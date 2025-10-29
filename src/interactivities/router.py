@@ -350,39 +350,39 @@ async def patch_interactive(
                                                              )
     return new_interactive_id
 
-#
-# @router.delete("/{interactive_id}")
-# async def delete_interactive(
-#         interactive_id: Annotated[InteractiveId, Depends()],
-#         telegram_id: Annotated[TelegramId, Depends()],
-# ) -> InteractiveId:
-#     user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
-#     if user_id_role is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-#     if user_id_role.role != UserRoleEnum.leader:
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can patch interactives")
-#
-#     user_id = user_id_role.user_id
-#
-#     conducted = await Repository.get_interactive_conducted(interactive_id.interactive_id, user_id=user_id)
-#
-#     if conducted is None:
-#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
-#
-#     if conducted:
-#         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
-#
-#     if interactive_id.interactive_id in ws_router.interactive_sessions and conducted == False:
-#         await ws_router.disconnect_delete(interactive_id.interactive_id)
-#
-#     else:
-#         await Repository.remove_participant_from_interactive(interactive_id=interactive_id.interactive_id)
-#
-#     new_interactive_id = await Repository.delite_interactive(interactive_id=interactive_id.interactive_id)
-#
-#     return new_interactive_id
-#
-#
-# @router.get("/is_running/{interactive_id}")
-# async def is_running(interactive_id: Annotated[InteractiveId, Depends()]):
-#     return interactive_id.interactive_id in ws_router.interactive_sessions
+
+@router.delete("/{interactive_id}")
+async def delete_interactive(
+        interactive_id: Annotated[InteractiveId, Depends()],
+        telegram_id: Annotated[TelegramId, Depends()],
+) -> InteractiveId:
+    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
+    if user_id_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_id_role.role != UserRoleEnum.leader:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can patch interactives")
+
+    user_id = user_id_role.user_id
+
+    conducted = await Repository.get_interactive_conducted(interactive_id.interactive_id, user_id=user_id)
+
+    if conducted is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
+
+    if conducted:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
+
+    if interactive_id.interactive_id in ws_router.interactive_sessions and conducted == False:
+        await ws_router.disconnect_delete(interactive_id.interactive_id)
+
+    else:
+        await Repository.remove_participant_from_interactive(interactive_id=interactive_id.interactive_id)
+
+    new_interactive_id = await Repository.delite_interactive(interactive_id=interactive_id.interactive_id)
+
+    return new_interactive_id
+
+
+@router.get("/is_running/{interactive_id}")
+async def is_running(interactive_id: Annotated[InteractiveId, Depends()]):
+    return interactive_id.interactive_id in ws_router.interactive_sessions
