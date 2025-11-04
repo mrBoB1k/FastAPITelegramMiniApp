@@ -6,7 +6,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
 from requests_api import get_role, check_code, change_user_role
-from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu
+from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu, get_link_to_test
 
 from dotenv import load_dotenv
 import os
@@ -62,6 +62,11 @@ async def start_cmd(message: Message):
     if await get_role(message) == "leader":
         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_main_menu())
 
+@router.message(F.text == "Test")
+async def start_cmd(message: Message):
+    role = await get_role(message)
+    if await get_role(message) == "leader":
+        await message.answer("Панель управления интерактивами", reply_markup=get_link_to_test())
 
 @router.message(F.text == "Подключение к интерактиву")
 async def start_cmd(message: Message, state: FSMContext):

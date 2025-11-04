@@ -6,7 +6,8 @@ def get_host_keyboard():
     kb = [
         [types.KeyboardButton(text="Управление интерактивами")],
         [types.KeyboardButton(text="Подключение к интерактиву")],
-        [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
+        [types.KeyboardButton(text="Получить роль участника для комиссий урфу")],
+        [types.KeyboardButton(text="Test")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=kb,
@@ -46,6 +47,18 @@ def get_link_to_main_menu():
             InlineKeyboardButton(
                 text="Нажмите, чтобы войти 🌐",
                 web_app=WebAppInfo(url="https://voshod07.ru/leader/main_menu")
+            )
+        ]
+    ])
+
+    return keyboard_inline
+
+def get_link_to_test():
+    keyboard_inline = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="Test 🌐",
+                web_app=WebAppInfo(url="https://voshod07.ru/leader/test")
             )
         ]
     ])

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, ValidationError
 import enum
 from users.schemas import UserRoleEnum
 from fastapi import WebSocket
@@ -146,7 +146,16 @@ class LeaderSent(BaseModel):
 
 
 class ParticipantSent(BaseModel):
-    answer_id: int
+    answer_id: int | None = None
+    answer_ids: list[int] | None = None
+    answer_text: str | None = None
+
+    @field_validator('*', mode='after')
+    def check_one_field(cls, values):
+        filled = [v for v in values.values() if v is not None]
+        if len(filled) != 1:
+            raise ValueError("Нужно передать ровно одно из: answer_id, answer_ids, answer_text")
+        return values
 
 
 class CreateQuizParticipant(BaseModel):
