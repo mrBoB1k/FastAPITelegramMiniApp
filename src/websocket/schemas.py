@@ -2,8 +2,10 @@ from pydantic import BaseModel, ConfigDict, field_validator, ValidationError
 import enum
 from users.schemas import UserRoleEnum
 from fastapi import WebSocket
+from interactivities.schemas import InteractiveType as QuestionType
 
 
+# enum для обработки логики
 class Stage(str, enum.Enum):
     waiting = "waiting"
     countdown = "countdown"
@@ -25,21 +27,13 @@ class StatePause(str, enum.Enum):
     timer_n = "timer_n"
 
 
+# обработка паузы
 class DataPause(BaseModel):
     state: StatePause
     timer_n: int
 
 
-class Pause(BaseModel):
-    pause: DataPause
-
-
-class UserConnectWSInfo(BaseModel):
-    telegram_id: int
-    interactive_id: int
-    role: UserRoleEnum
-
-
+# для ссоздания InteractiveSession
 class InteractiveInfo(BaseModel):
     interactive_id: int
     code: str
@@ -50,6 +44,7 @@ class InteractiveInfo(BaseModel):
     countdown_duration: int
 
 
+# для отправки нужных json по websocket
 class DataStageWaiting(BaseModel):
     title: str
     description: str
@@ -63,6 +58,7 @@ class StageWaiting(BaseModel):
     pause: DataPause
 
 
+###############################################################
 class DataStageCountdown(BaseModel):
     timer: int
 
@@ -72,12 +68,7 @@ class StageCountdown(BaseModel):
     data: DataStageCountdown
 
 
-class Question(BaseModel):
-    id: int
-    text: str
-    position: int
-
-
+###############################################################
 class Answer(BaseModel):
     id: int
     text: str
@@ -87,6 +78,15 @@ class AnswerGet(Answer):
     is_correct: bool
 
 
+class Question(BaseModel):
+    id: int
+    text: str
+    position: int
+    question_weight: int
+    type: QuestionType
+    image: str | None = None
+
+
 class DataStageQuestion(BaseModel):
     questions_count: int
     timer: int
@@ -94,18 +94,54 @@ class DataStageQuestion(BaseModel):
     title: str
     code: str
     question: Question
-    answers: list[Answer]
 
 
 class StageQuestion(BaseModel):
     stage: Stage
-    data: DataStageQuestion
     pause: DataPause
+    data: DataStageQuestion
+    data_answers: list[Answer] | None = None
 
+
+###############################################################
+class PercentageTypeText(BaseModel):
+    id: int
+    text: str
+    percentage: float
 
 class Percentage(BaseModel):
     id: int
     percentage: float
+
+
+class DataAnswersStageDiscussionTypeOne(BaseModel):
+    id_correct_answer: int
+    percentages: list[Percentage]
+
+
+class DataAnswersStageDiscussionTypeMany(BaseModel):
+    id_correct_answer: list[int]
+    percentages: list[Percentage]
+
+
+class CorrectAnswerStageDiscussionTypeTextLeader(BaseModel):
+    text: str
+    percentage: float
+
+
+class DataAnswersStageDiscussionTypeTextLeader(BaseModel):
+    correct_answers: list[CorrectAnswerStageDiscussionTypeTextLeader]
+
+
+class DataAnswersStageDiscussionTypeTextParticipantTrue(BaseModel):
+    is_correct: bool
+    answer: str
+    percentage: float
+
+
+class DataAnswersStageDiscussionTypeTextParticipantFalse(BaseModel):
+    is_correct: bool
+    answers: list[CorrectAnswerStageDiscussionTypeTextLeader]
 
 
 class DataStageDiscussion(BaseModel):
@@ -115,19 +151,29 @@ class DataStageDiscussion(BaseModel):
     title: str
     code: str
     question: Question
-    id_correct_answer: int
-    percentages: list[Percentage]
+
+
+class WinnerDiscussion(BaseModel):
+    position: int
+    username: str
+    score: int
 
 
 class StageDiscussion(BaseModel):
     stage: Stage
-    data: DataStageDiscussion
     pause: DataPause
+    data: DataStageDiscussion
+    data_answers: DataAnswersStageDiscussionTypeOne | DataAnswersStageDiscussionTypeMany | DataAnswersStageDiscussionTypeTextLeader | DataAnswersStageDiscussionTypeTextParticipantTrue | DataAnswersStageDiscussionTypeTextParticipantFalse | None
+    winners: list[WinnerDiscussion]
 
 
-class Winner(BaseModel):
-    position: int
-    username: str
+class StageDiscussionParticipant(StageDiscussion):
+    score: int
+
+
+###############################################################
+class Winner(WinnerDiscussion):
+    time: int
 
 
 class DataStageEnd(BaseModel):
@@ -141,6 +187,11 @@ class StageEnd(BaseModel):
     data: DataStageEnd
 
 
+class StageEndParticipant(StageEnd):
+    score: int
+
+
+# обработка сообщений отправленных на бек по websocket
 class LeaderSent(BaseModel):
     interactive_status: InteractiveStatus
 
@@ -150,25 +201,15 @@ class ParticipantSent(BaseModel):
     answer_ids: list[int] | None = None
     answer_text: str | None = None
 
-    @field_validator('*', mode='after')
-    def check_one_field(cls, values):
-        filled = [v for v in values.values() if v is not None]
-        if len(filled) != 1:
-            raise ValueError("Нужно передать ровно одно из: answer_id, answer_ids, answer_text")
-        return values
 
-
+# добавление в бд участника интерактива
 class CreateQuizParticipant(BaseModel):
     user_id: int
     interactive_id: int
+    total_time: int
 
 
-class PutUserAnswers(BaseModel):
-    question_id: int
-    participant_id: int
-    answer_id: int
-
-
+# облегчение взаимодействия
 class WebSocketConnection(BaseModel):
     websocket: WebSocket
     user_id: int

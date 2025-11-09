@@ -41,7 +41,7 @@ async def websocket_endpoint(
 
         else:
             participant_id = await Repository.register_quiz_participant(
-                CreateQuizParticipant(user_id=user_id, interactive_id=interactive_id))
+                CreateQuizParticipant(user_id=user_id, interactive_id=interactive_id, total_time=0))
             while True:
                 data = await websocket.receive_json()
                 participant_sent = ParticipantSent(**data)

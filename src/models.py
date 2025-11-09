@@ -96,6 +96,7 @@ class UserAnswer(AsyncAttrs, Base):
     answer_data = Column(JSON, nullable=False)
     answered_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     time = Column(Integer, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
 
     @property
     def answer_type(self):
@@ -130,7 +131,7 @@ class UserAnswer(AsyncAttrs, Base):
             "answer_ids": answer_ids
         }
 
-    def set_text_answer(self, answer_text, matched_answer_id=None):
+    def set_text_answer(self, answer_text, matched_answer_id = None):
         self.answer_data = {
             "type": "text",
             "answer_text": answer_text,

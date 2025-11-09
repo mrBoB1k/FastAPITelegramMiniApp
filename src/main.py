@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from database import init_db
 
 from users.router import router as user_router
-# from websocket.router import router as websocket_router
+from websocket.router import router as websocket_router
 from interactivities.router import router as interactivity_router
 # from reports.router import router as report_router
 # from broadcasts.router import router as broadcast_router
@@ -44,6 +44,6 @@ app.add_middleware(
 
 app.include_router(user_router)
 app.include_router(interactivity_router)
-# app.include_router(websocket_router)
+app.include_router(websocket_router)
 # app.include_router(report_router)
 # app.include_router(broadcast_router)
