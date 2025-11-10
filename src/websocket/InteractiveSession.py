@@ -142,6 +142,10 @@ class InteractiveSession:
                     self.stage = new_stage
                     self.timer_for_rating = 0
                     return
+            elif new_stage == Stage.DISCUSSION:
+                await Repository.add_time_for_question(interactive_id=self.interactive_id,question_id=self.current_question.id,time_question=self.timer_for_rating)
+                self.stage = new_stage
+                return
             else:
                 self.stage = new_stage
                 return

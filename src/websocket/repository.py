@@ -504,3 +504,47 @@ class Repository:
 
                 await session.commit()
                 return
+
+    @classmethod
+    async def add_time_for_question(
+            cls,
+            interactive_id: int,
+            question_id: int,
+            time_question: int
+    ):
+        async with new_session() as session:
+            # Получаем всех участников интерактива
+            participants = (
+                await session.execute(
+                    select(QuizParticipant).where(QuizParticipant.interactive_id == interactive_id)
+                )
+            ).scalars().all()
+
+            if not participants:
+                return  # никого нет
+
+            participant_ids = [p.id for p in participants]
+
+            # Получаем все ответы этих участников на данный вопрос
+            user_answers = (
+                await session.execute(
+                    select(UserAnswer)
+                    .where(
+                        UserAnswer.participant_id.in_(participant_ids),
+                        UserAnswer.question_id == question_id
+                    )
+                )
+            ).scalars().all()
+
+            # Создаём словарь: participant_id -> time (из ответа)
+            answer_times = {ua.participant_id: ua.time for ua in user_answers}
+
+            # Обновляем total_time каждому участнику
+            for participant in participants:
+                add_time = answer_times.get(participant.id, time_question)
+                participant.total_time += add_time
+                session.add(participant)
+
+            # Сохраняем изменения
+            await session.commit()
+            return
