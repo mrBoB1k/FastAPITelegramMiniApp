@@ -85,7 +85,7 @@ class Repository:
                     position=q.position,
                     question_weight=q.score,
                     type=q.type,
-                    image=f"https://carclicker.ru/{img.bucket_name}/{img.unique_filename}" if img else None
+                    image=f"https://carclicker.ru/{img.bucket_name}/{img.unique_filename}" if img else ""
                 )
                 for q, img in questions_with_images
             ]
