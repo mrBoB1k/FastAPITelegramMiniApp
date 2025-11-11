@@ -6,7 +6,7 @@ from websocket.schemas import LeaderSent, ParticipantSent, WebSocketConnection, 
     QuestionType, StageWaiting, StageCountdown, StageQuestion, StageDiscussion, StageEnd, \
     DataAnswersStageDiscussionTypeOne, DataAnswersStageDiscussionTypeMany, DataAnswersStageDiscussionTypeTextLeader, \
     DataAnswersStageDiscussionTypeTextParticipantTrue, DataAnswersStageDiscussionTypeTextParticipantFalse, \
-    StageDiscussionParticipant, CorrectAnswerStageDiscussionTypeTextLeader, StageEndParticipant
+    StageDiscussionParticipant, CorrectAnswerStageDiscussionTypeTextLeader, StageEndParticipant, Winner, ScoreStageEnd
 
 
 class SessionManager:
@@ -145,9 +145,11 @@ class SessionManager:
                             if is_correct:
                                 try:
                                     score = await Repository.get_user_score(data.user_id, interactive_id)
-                                    match = await Repository.get_user_matched_answer_id(data.user_id, message.data.question.id)
+                                    match = await Repository.get_user_matched_answer_id(data.user_id,
+                                                                                        message.data.question.id)
                                     item = next((p for p in persentages_text if p.id == match), None)
-                                    message.data_answers = DataAnswersStageDiscussionTypeTextParticipantTrue(is_correct=is_correct, answer=item.text, percentage=item.percentage)
+                                    message.data_answers = DataAnswersStageDiscussionTypeTextParticipantTrue(
+                                        is_correct=is_correct, answer=item.text, percentage=item.percentage)
                                     participant = StageDiscussionParticipant(**message.model_dump(), score=score)
                                     await data.websocket.send_json(participant.model_dump())
                                 except:
@@ -167,6 +169,22 @@ class SessionManager:
                                 except:
                                     await self.disconnect(interactive_id, data.user_id, data.role)
             elif stage == Stage.END:
+                winners_sorted_list = await Repository.get_winners(interactive_id)
+                winners = []
+                winners_dict = {}
+                for i, w in enumerate(winners_sorted_list):
+                    winners.append(Winner(
+                        position=i + 1,
+                        username=w["username"],
+                        score=w["score"],
+                        time=w["total_time"]
+                    ))
+                    winners_dict[w["user_id"]] = ScoreStageEnd(
+                        position=i + 1,
+                        score=w["score"],
+                        time=w["total_time"]
+                    )
+                message.data.winners = winners
                 for data in self.active_connections[interactive_id]:
                     if data.role == UserRoleEnum.leader:
                         try:
@@ -175,7 +193,7 @@ class SessionManager:
                             await self.disconnect(interactive_id, data.user_id, data.role)
                     else:
                         try:
-                            score = await Repository.get_user_score(data.user_id, interactive_id)
+                            score = winners_dict[data.user_id]
                             participant = StageEndParticipant(**message.model_dump(), score=score)
                             await data.websocket.send_json(participant.model_dump())
                         except:

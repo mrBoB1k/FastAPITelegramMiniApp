@@ -175,11 +175,16 @@ class StageDiscussionParticipant(StageDiscussion):
 class Winner(WinnerDiscussion):
     time: int
 
+class ScoreStageEnd(BaseModel):
+    position: int
+    score: int
+    time: int
+
 
 class DataStageEnd(BaseModel):
     title: str
     participants_total: int
-    winners: list[Winner]
+    winners: list[Winner] | None = None
 
 
 class StageEnd(BaseModel):
@@ -188,7 +193,7 @@ class StageEnd(BaseModel):
 
 
 class StageEndParticipant(StageEnd):
-    score: int
+    score: ScoreStageEnd
 
 
 # обработка сообщений отправленных на бек по websocket

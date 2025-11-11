@@ -278,8 +278,7 @@ class InteractiveSession:
         """Обработка завершения интерактива"""
         stage_now = self.stage
         participants_total = await Repository.get_participant_count(self.interactive_id)
-        winners = await Repository.get_winners(self.interactive_id)
-        data = DataStageEnd(title=self.title, participants_total=participants_total, winners=winners)
+        data = DataStageEnd(title=self.title, participants_total=participants_total)
         await self.broadcast_callback(self.interactive_id, StageEnd(stage=stage_now, data=data), stage_now)
         # Помечаем интерактив как завершённый в БД
         await Repository.mark_interactive_conducted(self.interactive_id)

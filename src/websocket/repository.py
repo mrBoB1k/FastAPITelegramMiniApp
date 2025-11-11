@@ -403,7 +403,7 @@ class Repository:
             return winners
 
     @classmethod
-    async def get_winners(cls, interactive_id: int) -> list[Winner]:
+    async def get_winners(cls, interactive_id: int):
         async with new_session() as session:
             # 1. Получаем всех участников викторины с их результатами за один запрос
             stmt = (
@@ -450,20 +450,19 @@ class Repository:
 
             # 3. Сортировка по score DESC, total_time ASC
             participants_list.sort(key=lambda x: (-x["score"], x["total_time"]))
-            winners_list = participants_list[:3]
 
-            # 4. Формируем список победителей
-            winners = [
-                Winner(
-                    position=i + 1,
-                    username=w["username"],
-                    score=w["score"],
-                    time=w["total_time"]
-                )
-                for i, w in enumerate(winners_list)
-            ]
+            # # 4. Формируем список победителей
+            # winners = [
+            #     Winner(
+            #         position=i + 1,
+            #         username=w["username"],
+            #         score=w["score"],
+            #         time=w["total_time"]
+            #     )
+            #     for i, w in enumerate(winners_list)
+            # ]
 
-            return winners
+            return participants_list
 
     @classmethod
     async def get_participant_count(cls, interactive_id: int) -> int:

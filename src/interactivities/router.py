@@ -55,6 +55,9 @@ async def creat_interactive(
 
         count_answers = len(question.answers)
 
+        if question.score < 1 or question.score > 5:
+            raise HTTPException(status_code=400, detail=f"Question score must be between 1 and 5")
+
         if question.image is not None and question.image == "image":
             count_images += 1
 
@@ -242,6 +245,9 @@ async def patch_interactive(
             raise HTTPException(status_code=400, detail=f"Question positions must be sequential starting from 1")
 
         count_answers = len(question.answers)
+
+        if question.score < 1 or question.score > 5:
+            raise HTTPException(status_code=400, detail=f"Question score must be between 1 and 5")
 
         if question.image is not None and question.image == "image":
             count_images += 1
