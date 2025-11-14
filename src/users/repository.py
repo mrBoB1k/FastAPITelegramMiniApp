@@ -41,3 +41,13 @@ class Repository:
             await session.refresh(user)
 
             return user
+
+    @classmethod
+    async def get_interactive_count_by_user_id(cls, user_id: int) -> int:
+        async with new_session() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(Interactive)
+                .where(Interactive.created_by_id == user_id)
+            )
+            return result.scalar_one()
