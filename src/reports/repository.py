@@ -18,53 +18,6 @@ class Repository:
             user_id = result.scalar_one_or_none()
             return user_id
 
-    @classmethod
-    async def get_reports_preview(cls, user_id: int) -> InteractiveList:
-        async with new_session() as session:
-            participant_count_subq = (
-                select(
-                    QuizParticipant.interactive_id,
-                    func.count(QuizParticipant.id).label('participant_count')
-                )
-                .group_by(QuizParticipant.interactive_id)
-                .subquery()
-            )
-            query = (
-                select(
-                    Interactive.id,
-                    Interactive.title,
-                    Interactive.target_audience,
-                    Interactive.date_completed,
-                    Interactive.location,
-                    participant_count_subq.c.participant_count
-                )
-                .join(
-                    participant_count_subq,
-                    Interactive.id == participant_count_subq.c.interactive_id,
-                    isouter=True
-                )
-                .where(
-                    Interactive.created_by_id == user_id,
-                    Interactive.conducted == True
-                )
-                .order_by(Interactive.date_completed.desc())
-            )
-
-            result = await session.execute(query)
-            interactives = result.all()
-
-            return InteractiveList(interactives_list=[
-                PreviewInteractive(
-                    title=interactive.title,
-                    participant_count=interactive.participant_count or 0,
-                    target_audience=interactive.target_audience,
-                    location=interactive.location,
-                    date_completed=cls._format_date(interactive.date_completed),
-                    interactive_id=interactive.id
-                )
-                for interactive in interactives
-            ])
-
     @staticmethod
     def _format_date(date_obj: datetime | None) -> str | None:
         """Преобразует datetime в строку формата 'день.месяц.год' (23.05.25)"""
@@ -100,18 +53,30 @@ class Repository:
                     continue
 
                 # Считаем количество правильных ответов для участника
-                correct_answers = await session.execute(
-                    select(func.count())
-                    .select_from(UserAnswer)
-                    .join(Answer, UserAnswer.answer_id == Answer.id)
+                correct_answers_count = await session.scalar(
+                    select(func.count(UserAnswer.id))
                     .where(
-                        and_(
-                            UserAnswer.participant_id == participant.id,
-                            Answer.is_correct == True
-                        )
+                        UserAnswer.participant_id == participant.id,
+                        UserAnswer.is_correct == True
                     )
                 )
-                correct_answers_count = correct_answers.scalar()
+
+                # Получаем время ответов участника
+                total_time = f"{participant.total_time // 60}:{participant.total_time % 60:02d}"
+
+                # Получаем сумму баллов за правильные ответы участника
+                stmt = (
+                    select(func.coalesce(func.sum(Question.score), 0))
+                    .select_from(UserAnswer)
+                    .join(Question, UserAnswer.question_id == Question.id)
+                    .where(
+                        UserAnswer.participant_id == participant.id,
+                        UserAnswer.is_correct == True
+                    )
+                )
+
+                result = await session.scalar(stmt)
+                total_score = result or 0
 
                 # Собираем данные для экспорта
                 analytics_data.append(ExportForAnalise(
@@ -126,10 +91,12 @@ class Repository:
                     telegram_id=user.telegram_id,
                     username=user.username,
                     full_name=f"{user.first_name} {user.last_name}" if user.last_name else user.first_name,
-                    correct_answers_count=correct_answers_count
+                    correct_answers_count=correct_answers_count,
+                    total_time=total_time,
+                    total_score=total_score,
                 ))
 
-            analytics_data.sort(key=lambda x: x.correct_answers_count, reverse=True)
+            analytics_data.sort(key=lambda x: (-x.total_score, x.total_time))
 
             return analytics_data
 
@@ -196,6 +163,8 @@ class Repository:
                         id=question.id,
                         position=question.position,
                         text=question.text,
+                        type=question.type,
+                        score=question.score,
                         answers=answers_data
                     )
                 )
@@ -229,14 +198,24 @@ class Repository:
                 correct_answers = 0
                 participant_answers = []
                 for ua in user_answers:
-                    answer = await session.get(Answer, ua.answer_id)
-                    if answer and answer.is_correct:
+                    if ua.is_correct:
                         correct_answers += 1
 
+                    answer_id = None
+                    if ua.answer_type == 'text':
+                        answer_id = ua.text_answer
+                    if ua.answer_type == 'one':
+                        answer_id = ua.selected_answer_ids[0]
+                    if ua.answer_type == 'many':
+                        answer_id = ua.selected_answer_ids
+
+                    time = f"{ua.time // 60}:{ua.time % 60:02d}"
                     participant_answers.append(
                         ParticipantAnswer(
                             question_id=ua.question_id,
-                            answer_id=ua.answer_id
+                            answer_id=answer_id,
+                            time=time,
+                            is_correct=ua.is_correct,
                         )
                     )
 
@@ -245,17 +224,36 @@ class Repository:
                 if user.last_name:
                     full_name += f" {user.last_name}"
 
+                # Получаем время ответов участника
+                total_time = f"{participant.total_time // 60}:{participant.total_time % 60:02d}"
+
+                # Получаем сумму баллов за правильные ответы участника
+                stmt = (
+                    select(func.coalesce(func.sum(Question.score), 0))
+                    .select_from(UserAnswer)
+                    .join(Question, UserAnswer.question_id == Question.id)
+                    .where(
+                        UserAnswer.participant_id == participant.id,
+                        UserAnswer.is_correct == True
+                    )
+                )
+
+                result = await session.scalar(stmt)
+                total_score = result or 0
+
                 body_data.append(
                     ExportForLeaderBody(
                         telegram_id=user.telegram_id,
                         username=user.username,
                         full_name=full_name,
                         correct_answers_count=correct_answers,
+                        total_time=total_time,
+                        total_score=total_score,
                         answers=participant_answers
                     )
                 )
 
-            body_data.sort(key=lambda x: x.correct_answers_count, reverse=True)
+            body_data.sort(key= lambda x: (-x.total_score, x.total_time))
 
             return ExportForLeaderData(
                 header=header,

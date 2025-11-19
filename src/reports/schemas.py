@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 import enum
 
+from interactivities.schemas import InteractiveType
+
 
 class ExportEnum(str, enum.Enum):
     forLeader = "forLeader"
@@ -40,7 +42,11 @@ class ExportForAnalise(BaseModel):
     telegram_id: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User telegram_id
     username: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User username
     full_name: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User first_name и last_name. После этого объединить их
-    correct_answers_count: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву. После в таблице UserAnswer посчитать кол-во, у которых answer_id в таблице Answer is_correct = true
+    correct_answers_count: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву. После в таблице UserAnswer посчитать кол-во, у которых is_correct = true
+    total_time: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву, в ней взять total_time
+    total_score: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву. После в таблице UserAnswer найти все записи, где is_correct = true. По question_id перейти в таблицу questions и взять от туда score
+
+
 
 
 class AnswerForLeaderHeader(BaseModel):
@@ -52,6 +58,8 @@ class QuestionForLeaderHeader(BaseModel):
     id: int
     position: int
     text: str
+    type: InteractiveType
+    score: int
     answers: list[AnswerForLeaderHeader]
 
 
@@ -67,13 +75,18 @@ class ExportForLeaderHeader(BaseModel):
 
 class ParticipantAnswer(BaseModel):
     question_id: int
-    answer_id: int  # ID выбранного ответа
+    answer_id: int | list[int] | str | None  # ID выбранного ответа
+    time: str
+    is_correct: bool
+
 
 class ExportForLeaderBody(BaseModel):
     telegram_id: int
     username: str
     full_name: str
     correct_answers_count: int
+    total_time: str
+    total_score: int
     answers: list[ParticipantAnswer]
 
 class ExportForLeaderData(BaseModel):
