@@ -165,6 +165,9 @@ async def creat_interactive(
 async def get_me(
         data: Annotated[GetDataInteractive, Depends()],
 ) -> MyInteractives:
+    if data.from_number < 0 or data.to_number < 0 or  data.to_number < data.from_number:
+        raise HTTPException(status_code=404, detail=f"Invalid input data: from_number {data.from_number} and to_number {data.to_number} are invalid")
+
     user_id = await Repository.get_user_id(data.telegram_id)
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
