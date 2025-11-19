@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
-    InteractiveCode, Interactive, InteractiveType, MinioData
+    InteractiveCode, Interactive, InteractiveType, MinioData, GetDataInteractive
 from interactivities.repository import Repository
 from users.schemas import UserRoleEnum
 from websocket.router import manager as ws_router
@@ -163,16 +163,14 @@ async def creat_interactive(
 
 @router.get("/me")
 async def get_me(
-        telegram_id: Annotated[TelegramId, Depends()],
+        data: Annotated[GetDataInteractive, Depends()],
 ) -> MyInteractives:
-    user_id = await Repository.get_user_id(telegram_id.telegram_id)
+    user_id = await Repository.get_user_id(data.telegram_id)
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    interactives_list_conducted = await Repository.get_interactives(user_id, conducted=True)
-    interactives_list_not_conducted = await Repository.get_interactives(user_id, conducted=False)
 
-    return MyInteractives(interactives_list_conducted=interactives_list_conducted,
-                          interactives_list_not_conducted=interactives_list_not_conducted)
+    result = await Repository.get_interactives(user_id=user_id, filter=data.filter, from_number=data.from_number, to_number=data.to_number)
+    return result
 
 
 @router.get("/join")

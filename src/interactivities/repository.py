@@ -1,11 +1,12 @@
 from typing import List
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, case
 from database import new_session
 from models import *
 from datetime import datetime
-from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, InteractiveConducted, \
-    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull
+from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, \
+    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractives, FilterEnum, \
+    InteractiveList
 from minios3.schemas import ImageModel
 import random
 import string
@@ -127,71 +128,89 @@ class Repository:
             return user_id
 
     @classmethod
-    async def get_interactives(cls, user_id: int, conducted: bool) -> list[InteractiveConducted]:
+    async def get_interactives(cls, user_id: int, filter: FilterEnum, from_number: int,
+                               to_number: int) -> MyInteractives:
         async with new_session() as session:
-            question_count_subq = (
+            # Подзапрос для подсчета количества участников
+            participant_count_subq = (
                 select(
-                    Question.interactive_id,
-                    func.count(Question.id).label('question_count')
+                    QuizParticipant.interactive_id,
+                    func.count(QuizParticipant.id).label('participant_count')
                 )
-                .group_by(Question.interactive_id)
+                .group_by(QuizParticipant.interactive_id)
                 .subquery()
             )
-            if conducted:
-                query = (
-                    select(
-                        Interactive.id,
-                        Interactive.title,
-                        Interactive.target_audience,
-                        Interactive.date_completed,
-                        question_count_subq.c.question_count
-                    )
-                    .join(
-                        question_count_subq,
-                        Interactive.id == question_count_subq.c.interactive_id,
-                        isouter=True
-                    )
-                    .where(
-                        Interactive.created_by_id == user_id,
-                        Interactive.conducted == conducted
-                    )
-                    .order_by(Interactive.date_completed.desc())
-                )
-            else:
-                query = (
-                    select(
-                        Interactive.id,
-                        Interactive.title,
-                        Interactive.target_audience,
-                        Interactive.date_completed,
-                        Interactive.created_at,
-                        question_count_subq.c.question_count
-                    )
-                    .join(
-                        question_count_subq,
-                        Interactive.id == question_count_subq.c.interactive_id,
-                        isouter=True
-                    )
-                    .where(
-                        Interactive.created_by_id == user_id,
-                        Interactive.conducted == conducted
-                    )
-                    .order_by(Interactive.created_at.desc())
-                )
 
-            result = await session.execute(query)
-            interactives = result.all()
+            # Вычисляем дату для сортировки и отображения
+            date_field = case(
+                (Interactive.conducted == True, Interactive.date_completed),
+                else_=Interactive.created_at
+            ).label("display_date")
 
-            return [
-                InteractiveConducted(
-                    id=interactive.id,
+            # Базовый запрос с общими полями
+            base_query = (
+                select(
+                    Interactive.id,
+                    Interactive.title,
+                    Interactive.target_audience,
+                    date_field,
+                    Interactive.created_at,
+                    Interactive.conducted,
+                    Interactive.date_completed,
+                    func.coalesce(participant_count_subq.c.participant_count, 0).label('participant_count')
+                )
+                .join(
+                    participant_count_subq,
+                    Interactive.id == participant_count_subq.c.interactive_id,
+                    isouter=True
+                )
+                .where(Interactive.created_by_id == user_id)
+            )
+
+            # Применяем фильтры
+            if filter == FilterEnum.conducted:
+                base_query = base_query.where(Interactive.conducted == True)
+            elif filter == FilterEnum.not_conducted:
+                base_query = base_query.where(Interactive.conducted == False)
+            # Для FilterEnum.all не добавляем дополнительных условий
+
+            # Сортируем по вычисленной дате (date_completed для проведенных, created_at для остальных)
+            base_query = base_query.order_by(date_field.desc())
+
+            # Выполняем запрос для получения общего количества (для определения is_end)
+            count_query = select(func.count()).select_from(base_query.alias())
+            total_count_result = await session.execute(count_query)
+            total_count = total_count_result.scalar()
+
+            # Применяем пагинацию
+            query_with_pagination = base_query.offset(from_number).limit(to_number - from_number + 1)
+
+            # Выполняем основной запрос
+            result = await session.execute(query_with_pagination)
+            interactives_data = result.all()
+
+            # Преобразуем данные в схему
+            interactives_list = []
+            for interactive in interactives_data:
+                # Используем уже вычисленное поле display_date
+                date_str = interactive.display_date.strftime("%Y.%m.%d %H:%M") if interactive.display_date else None
+
+                interactives_list.append(InteractiveList(
                     title=interactive.title,
                     target_audience=interactive.target_audience,
-                    question_count=interactive.question_count or 0,
-                    date_completed=cls._format_date(interactive.date_completed)
-                )
-                for interactive in interactives
-            ]
+                    participant_count=interactive.participant_count,
+                    is_conducted=interactive.conducted,
+                    id=interactive.id,
+                    date_completed=date_str
+                ))
+
+            # Определяем, достигнут ли конец списка
+            is_end = total_count <= to_number + 1 or len(interactives_list) < (to_number - from_number + 1)
+
+            return MyInteractives(
+                interactives_list=interactives_list,
+                is_end=is_end
+            )
 
     @staticmethod
     def _format_date(date_obj: datetime | None) -> str | None:

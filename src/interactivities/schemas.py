@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from users.schemas import UserRoleEnum
 from fastapi import UploadFile
 
@@ -16,10 +16,20 @@ class InteractiveType(str, enum.Enum):
     many = "many"
     text = "text"
 
+class FilterEnum(str, enum.Enum):
+    all = "all"
+    conducted = "conducted"
+    not_conducted = "not_conducted"
+
 
 class TelegramId(BaseModel):
     telegram_id: int
 
+class GetDataInteractive(BaseModel):
+    telegram_id: int
+    filter: FilterEnum
+    from_number: int
+    to_number: int
 
 class UserIdAndRole(BaseModel):
     user_id: int
@@ -103,14 +113,15 @@ class QuestionCreate(BaseModel):
     interactive_id: int
 
 
-class InteractiveConducted(BaseModel):
+class InteractiveList(BaseModel):
     title: str
-    question_count: int
     target_audience: str | None = None
+    participant_count: int
+    is_conducted: bool
     id: int
     date_completed: str | None = None
 
 
 class MyInteractives(BaseModel):
-    interactives_list_conducted: list[InteractiveConducted]
-    interactives_list_not_conducted: list[InteractiveConducted]
+    interactives_list: list[InteractiveList]
+    is_end: bool
