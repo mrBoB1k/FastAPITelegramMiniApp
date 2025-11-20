@@ -36,6 +36,12 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
     if user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    for interactive_id in input_data.interactive_id:
+        flag = await Repository.check_user_conducted_interactive(user_id=user_id, interactive_id=interactive_id.id)
+        if not flag:
+            raise HTTPException(status_code=404, detail=f"interactive id {interactive_id.id} not found for user {input_data.telegram_id}, or not conducted")
+
+
     if input_data.report_type == ExportEnum.forAnalise.value:
         wb = Workbook()
         ws = wb.active
@@ -311,7 +317,9 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                                         else:
                                             cell.border = Border(top=thin_side, left=thin_side, right=thin_side,
                                                                  bottom=thin_side)
-                                        cell.fill = correct_answer_fill
+
+                                        if answer.is_correct:
+                                            cell.fill = correct_answer_fill
                                         minutes, seconds = map(int, answer.time.split(':'))
                                         time_obj = time(0, minutes, seconds)  # часы, минуты, секунды
                                         cell = ws.cell(row=row, column=current_col + answer_count, value=time_obj)
@@ -350,7 +358,10 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                                         else:
                                             cell.border = Border(top=thin_side, left=thin_side, right=thin_side,
                                                                  bottom=thin_side)
-                                        cell.fill = correct_answer_fill
+
+                                        if answer.is_correct:
+                                            cell.fill = correct_answer_fill
+
                                         minutes, seconds = map(int, answer.time.split(':'))
                                         time_obj = time(0, minutes, seconds)  # часы, минуты, секунды
                                         cell = ws.cell(row=row, column=current_col + answer_count, value=time_obj)

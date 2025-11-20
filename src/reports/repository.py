@@ -270,3 +270,22 @@ class Repository:
             if data is not None:
                 return DateTitleSH(title=data.title, date_completed=cls._format_date2(data.date_completed))
             return data
+
+
+
+    @classmethod
+    async def check_user_conducted_interactive(cls, user_id: int, interactive_id: int) -> bool:
+        async with new_session() as session:
+            query = (
+                select(Interactive.id)
+                .where(
+                    Interactive.id == interactive_id,
+                    Interactive.created_by_id == user_id,
+                    Interactive.conducted == True
+                )
+            )
+
+            result = await session.execute(query)
+            interactive = result.scalar_one_or_none()
+
+            return interactive is not None
