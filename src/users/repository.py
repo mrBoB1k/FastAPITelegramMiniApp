@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from database import new_session
 from users.schemas import UserRegister, UserRoleEnum, UsersChangeRole, UsersBase
 from models import *
@@ -51,3 +51,63 @@ class Repository:
                 .where(Interactive.created_by_id == user_id)
             )
             return result.scalar_one()
+
+    @classmethod
+    async def get_all_interactive_id(cls, user_id: int) -> list[int]:
+        async with new_session() as session:
+            query = (
+                select(Interactive.id)
+                .where(Interactive.created_by_id == user_id)
+            )
+
+            result = await session.execute(query)
+            interactive_ids = result.scalars().all()
+
+            return list(interactive_ids)
+
+    @classmethod
+    async def get_all_quiz_participants_id(cls, user_id: int) -> list[int]:
+        async with new_session() as session:
+            query = (
+                select(QuizParticipant.id)
+                .where(QuizParticipant.user_id == user_id)
+            )
+
+            result = await session.execute(query)
+            quiz_participants_id = result.scalars().all()
+
+            return list(quiz_participants_id)
+
+    @classmethod
+    async def delete_quiz_participant_and_answers(cls, quiz_participant_id: int) -> bool:
+        async with new_session() as session:
+            async with session.begin():
+                # Удаляем все ответы участника
+                delete_answers_query = (
+                    delete(UserAnswer)
+                    .where(UserAnswer.participant_id == quiz_participant_id)
+                )
+                await session.execute(delete_answers_query)
+
+                # Удаляем участника
+                delete_participant_query = (
+                    delete(QuizParticipant)
+                    .where(QuizParticipant.id == quiz_participant_id)
+                )
+                result = await session.execute(delete_participant_query)
+
+                # Возвращаем True если участник был удален, False если не найден
+                return result.rowcount > 0
+
+    @classmethod
+    async def delete_user(cls, user_id: int) -> bool:
+        async with new_session() as session:
+            async with session.begin():
+                delete_query = (
+                    delete(User)
+                    .where(User.id == user_id)
+                )
+
+                result = await session.execute(delete_query)
+                # Возвращаем True если пользователь был удален, False если не найден
+                return result.rowcount > 0

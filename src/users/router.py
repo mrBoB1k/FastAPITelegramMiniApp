@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from interactivities.schemas import InteractiveCreate, Question, Answer, InteractiveType
 from users.schemas import UserRegister, TelegramId, UserRole, UsersChangeRole, UsersBase, UserRoleEnum
 from typing import Annotated
 from users.repository import Repository
-from interactivities.repository import Repository as Repository2
+
+from interactivities.repository import Repository as Repository_Interactivities
+from interactivities.schemas import InteractiveCreate, Question, Answer, InteractiveType
+
+from websocket.router import manager as ws_manager
 
 router = APIRouter(
     prefix="/api/users",
@@ -48,11 +51,51 @@ async def change_role(
     if data.role == UserRoleEnum.leader:
         interactive_count = await Repository.get_interactive_count_by_user_id(user.id)
         if interactive_count == 0:
-            code = await Repository2.generate_unique_code()
-            data_first_intractive.code=code
-            data_first_intractive.created_by_id=user.id
-            i = await Repository2.create_interactive(data=data_first_intractive,images=None)
+            code = await Repository_Interactivities.generate_unique_code()
+            data_first_intractive.code = code
+            data_first_intractive.created_by_id = user.id
+            i = await Repository_Interactivities.create_interactive(data=data_first_intractive, images=None)
     return user
+
+
+@router.delete("/{telegram_id}")
+async def delete_interactive(
+        telegram_id: Annotated[TelegramId, Depends()],
+):
+    user_id_role = await Repository_Interactivities.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
+    if user_id_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user_id = user_id_role.user_id
+
+    # удаление всех интерактивов вместе с ответами участников
+    interactive_ids = await Repository.get_all_interactive_id(user_id)
+    for interactive_id in interactive_ids:
+        if interactive_id in ws_manager.interactive_sessions:
+            await ws_manager.disconnect_delete(interactive_id=interactive_id)
+
+        else:
+            await Repository_Interactivities.remove_participant_from_interactive(interactive_id=interactive_id)
+
+        new_interactive_id = await Repository_Interactivities.delite_interactive(interactive_id=interactive_id)
+        if new_interactive_id.interactive_id != interactive_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"какая-то хуйня случилась с удалением интерактив {interactive_id}")
+
+    # удаление всех участий в интерактивах
+    quiz_participants_ids = await Repository.get_all_quiz_participants_id(user_id)
+    for quiz_participant_id in quiz_participants_ids:
+        flag = await Repository.delete_quiz_participant_and_answers(quiz_participant_id=quiz_participant_id)
+        if not flag:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"какая-то хуйня случилась с удалением твоего участия в интерактиве с quiz_participant_id {quiz_participant_id}")
+
+    # удаление пользователя
+    flag = await Repository.delete_user(user_id=user_id)
+    if not flag:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Ну какая-то хуйня пошла, и не смог удалить пользователя")
+
+    return
 
 
 data_first_intractive = InteractiveCreate(
@@ -76,18 +119,18 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Лев",
                 is_correct=False,
+            ),
+                Answer(
+                    text="Гепард",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Гепард",
-                is_correct=True,
+                    text="Лошадь",
+                    is_correct=False,
                 ),
                 Answer(
-                text="Лошадь",
-                is_correct=False,
-                ),
-                Answer(
-                text="Олень",
-                is_correct=False,
+                    text="Олень",
+                    is_correct=False,
                 )
             ]
         ),
@@ -100,18 +143,18 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Азот",
                 is_correct=False,
+            ),
+                Answer(
+                    text="Кислород",
+                    is_correct=False,
                 ),
                 Answer(
-                text="Кислород",
-                is_correct=False,
+                    text="Углекислый газ",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Углекислый газ",
-                is_correct=True,
-                ),
-                Answer(
-                text="Водород",
-                is_correct=False,
+                    text="Водород",
+                    is_correct=False,
                 )
             ]
         ),
@@ -124,22 +167,22 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Банан",
                 is_correct=False,
+            ),
+                Answer(
+                    text="Яблоко",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Яблоко",
-                is_correct=True,
+                    text="Ананас",
+                    is_correct=False,
                 ),
                 Answer(
-                text="Ананас",
-                is_correct=False,
+                    text="Груша",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Груша",
-                is_correct=True,
-                ),
-                Answer(
-                text="Арбуз",
-                is_correct=False,
+                    text="Арбуз",
+                    is_correct=False,
                 )
             ]
         ),
@@ -152,18 +195,18 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Монитор",
                 is_correct=False,
+            ),
+                Answer(
+                    text="Клавиатура",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Клавиатура",
-                is_correct=True,
+                    text="Мышь",
+                    is_correct=True,
                 ),
                 Answer(
-                text="Мышь",
-                is_correct=True,
-                ),
-                Answer(
-                text="Наушники",
-                is_correct=False,
+                    text="Наушники",
+                    is_correct=False,
                 )
             ]
         ),
@@ -176,7 +219,7 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Юпитер",
                 is_correct=True,
-                )
+            )
             ]
         ),
         Question(
@@ -188,13 +231,12 @@ data_first_intractive = InteractiveCreate(
             answers=[Answer(
                 text="Термометр",
                 is_correct=True,
-                ),
+            ),
                 Answer(
-                text="Градусник",
-                is_correct=True,
+                    text="Градусник",
+                    is_correct=True,
                 )
             ]
         )
     ]
 )
-

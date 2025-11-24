@@ -1,13 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
+import json
+from pydantic import ValidationError
+
 from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
     InteractiveCode, Interactive, InteractiveType, MinioData, GetDataInteractive
 from interactivities.repository import Repository
+
 from users.schemas import UserRoleEnum
-from websocket.router import manager as ws_router
+
+from websocket.router import manager as ws_manager
 from websocket.InteractiveSession import Stage
-import json
-from pydantic import ValidationError
+from websocket.schemas import StageEnd, DataStageEnd, Winner
+from websocket.repository import Repository as Repository_Websocket
+
+
 import minios3.services as services
 
 router = APIRouter(
@@ -165,14 +172,16 @@ async def creat_interactive(
 async def get_me(
         data: Annotated[GetDataInteractive, Depends()],
 ) -> MyInteractives:
-    if data.from_number < 0 or data.to_number < 0 or  data.to_number < data.from_number:
-        raise HTTPException(status_code=404, detail=f"Invalid input data: from_number {data.from_number} and to_number {data.to_number} are invalid")
+    if data.from_number < 0 or data.to_number < 0 or data.to_number < data.from_number:
+        raise HTTPException(status_code=404,
+                            detail=f"Invalid input data: from_number {data.from_number} and to_number {data.to_number} are invalid")
 
     user_id = await Repository.get_user_id(data.telegram_id)
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    result = await Repository.get_interactives(user_id=user_id, filter=data.filter, from_number=data.from_number, to_number=data.to_number)
+    result = await Repository.get_interactives(user_id=user_id, filter=data.filter, from_number=data.from_number,
+                                               to_number=data.to_number)
     return result
 
 
@@ -183,8 +192,8 @@ async def get_join_interactives(
     interactive_id = await Repository.check_code_exists(code.code)
     if interactive_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
-    if interactive_id in ws_router.interactive_sessions:
-        if await ws_router.interactive_sessions[interactive_id].get_stage() != Stage.WAITING:
+    if interactive_id in ws_manager.interactive_sessions:
+        if await ws_manager.interactive_sessions[interactive_id].get_stage() != Stage.WAITING:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
     return InteractiveId(interactive_id=interactive_id)
 
@@ -348,7 +357,7 @@ async def patch_interactive(
     if conducted:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
 
-    if interactive_id in ws_router.interactive_sessions:
+    if interactive_id in ws_manager.interactive_sessions:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
 
     new_interactive_id = await Repository.update_interactive(interactive_id=interactive_id,
@@ -379,8 +388,8 @@ async def delete_interactive(
     if conducted:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
 
-    if interactive_id.interactive_id in ws_router.interactive_sessions and conducted == False:
-        await ws_router.disconnect_delete(interactive_id.interactive_id)
+    if interactive_id.interactive_id in ws_manager.interactive_sessions and conducted == False:
+        await ws_manager.disconnect_delete(interactive_id.interactive_id)
 
     else:
         await Repository.remove_participant_from_interactive(interactive_id=interactive_id.interactive_id)
@@ -392,4 +401,40 @@ async def delete_interactive(
 
 @router.get("/is_running/{interactive_id}")
 async def is_running(interactive_id: Annotated[InteractiveId, Depends()]):
-    return interactive_id.interactive_id in ws_router.interactive_sessions
+    return interactive_id.interactive_id in ws_manager.interactive_sessions
+
+
+@router.get("/end/{interactive_id}")
+async def get_interactive(
+        interactive_id: Annotated[InteractiveId, Depends()],
+        telegram_id: Annotated[TelegramId, Depends()],
+) -> StageEnd:
+    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
+    if user_id_role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_id_role.role != UserRoleEnum.leader:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get end info interactive")
+
+    user_id = user_id_role.user_id
+
+    title = await Repository.get_interactive_title(interactive_id=interactive_id.interactive_id, user_id=user_id)
+    if title is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Interactive not found or interactive not conducted")
+
+    participants_total = await Repository_Websocket.get_participant_count(interactive_id.interactive_id)
+
+    winners_sorted_list = await Repository_Websocket.get_winners(interactive_id.interactive_id)
+    winners = []
+    for i, w in enumerate(winners_sorted_list):
+        winners.append(Winner(
+            position=i + 1,
+            username=w["username"],
+            score=w["score"],
+            time=w["total_time"]
+        ))
+
+    data = DataStageEnd(title=title, participants_total=participants_total, winners=winners)
+    result = StageEnd(stage=Stage.END, data=data)
+
+    return result

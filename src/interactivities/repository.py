@@ -193,7 +193,7 @@ class Repository:
             interactives_list = []
             for interactive in interactives_data:
                 # Используем уже вычисленное поле display_date
-                date_str = interactive.display_date.strftime("%Y.%m.%d %H:%M") if interactive.display_date else None
+                date_str = interactive.display_date.strftime("%d.%m.%y %H:%M") if interactive.display_date else None
 
                 interactives_list.append(InteractiveList(
                     title=interactive.title,
@@ -211,13 +211,6 @@ class Repository:
                 interactives_list=interactives_list,
                 is_end=is_end
             )
-
-    @staticmethod
-    def _format_date(date_obj: datetime | None) -> str | None:
-        """Преобразует datetime в строку формата 'день.месяц.год' (23.05.25)"""
-        if date_obj is None:
-            return None
-        return date_obj.strftime('%d.%m.%y')
 
     @classmethod
     async def get_all_interactive_info(cls, user_id: int, interactive_id: int) -> InteractiveFull | None:
@@ -521,3 +514,17 @@ class Repository:
 
                 await session.commit()
                 return
+
+    @classmethod
+    async def get_interactive_title(cls, interactive_id: int, user_id: int) -> str | None:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Interactive.title)
+                .where(Interactive.id == interactive_id,
+                       Interactive.created_by_id == user_id,
+                       Interactive.conducted == True)
+            )
+            row = result.one_or_none()
+            if row is None:
+                return None
+            return row.title
