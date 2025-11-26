@@ -54,7 +54,7 @@ async def get_send(
         bucket = "broadcasts"
         ext = os.path.splitext(file.filename)[1]
 
-        unique = await Repository_interactive.generate_unique_filename(ext=ext, bucket_name=bucket)
+        unique = await Repository_interactive.generate_unique_filename(ext=ext[1:], bucket_name=bucket)
 
         saved_file = await services.save_image_to_minio(
             file=await file.read(),
