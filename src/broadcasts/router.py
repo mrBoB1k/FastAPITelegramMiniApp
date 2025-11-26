@@ -47,9 +47,12 @@ async def get_send(
 
     # Подготовка данных файла
     file_data = None
+    file_type = "document"
     if file:
         if file.size > 52428799:
             raise HTTPException(409, "File too big")
+
+        file_type = await determine_file_type(file, file.size)
 
         bucket = "broadcasts"
         ext = os.path.splitext(file.filename)[1]
@@ -84,7 +87,7 @@ async def get_send(
     # file_type Тип файла: document, photo, video, audio
     message_queue.enqueue(
         'worker.send_telegram_message',
-        args=(data_ids, text, file_data, "document"),
+        args=(data_ids, text, file_data, file_type),
         job_timeout=300
     )
 
@@ -99,3 +102,49 @@ async def get_queue_stats():
         "failed": len(message_queue.failed_job_registry),
         "finished": len(message_queue.finished_job_registry)
     }
+
+
+async def determine_file_type(file: UploadFile, file_size: int) -> str:
+    """
+    Определяет тип файла для отправки в Telegram
+    Возвращает: 'photo', 'audio', 'video', 'document'
+    """
+    # Получаем MIME type и расширение файла
+    mime_type = file.content_type
+    filename = file.filename.lower()
+
+    # 1. Проверяем фото
+    if mime_type and mime_type.startswith('image/'):
+        if file_size > 10 * 1024 * 1024:  # 10 МБ
+            return "document"
+
+        # Проверяем допустимые форматы изображений для Telegram
+        image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+        file_extension = os.path.splitext(filename)[1]
+        if file_extension in image_extensions:
+            return "photo"
+        else:
+            return "document"
+
+    # 2. Проверяем аудио
+    elif mime_type and mime_type.startswith('audio/'):
+
+        audio_extensions = ['.mp3', '.m4a']
+        file_extension = os.path.splitext(filename)[1]
+        if file_extension in audio_extensions:
+            return "audio"
+        else:
+            return "document"
+
+    # 3. Проверяем видео
+    elif mime_type and mime_type.startswith('video/'):
+        video_extensions = ['.mp4', '.mpeg4', '.mov', '.avi']
+        file_extension = os.path.splitext(filename)[1]
+        if file_extension in video_extensions:
+            return "video"
+        else:
+            return "document"
+
+    # 4. Всё остальное - документ
+    else:
+        return "document"
