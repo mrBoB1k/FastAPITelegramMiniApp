@@ -103,19 +103,19 @@ class Repository:
             return InteractiveId(interactive_id=new_interactive.id)
 
     @classmethod
-    async def check_filename_exists(cls, unique_filename: str) -> bool:
+    async def check_filename_exists(cls, unique_filename: str, bucket_name: str) -> bool:
         async with new_session() as session:
             result = await session.execute(
-                select(Image.id).where(Image.unique_filename == unique_filename)
+                select(Image.id).where(Image.unique_filename == unique_filename, Image.bucket_name == bucket_name)
             )
             exists = result.scalar_one_or_none() is not None
             return exists
 
     @classmethod
-    async def generate_unique_filename(cls, ext: str) -> str:
+    async def generate_unique_filename(cls, ext: str, bucket_name: str) -> str:
         while True:
             unique_filename = f"{uuid.uuid4()}.{ext}"
-            if not await cls.check_filename_exists(unique_filename):
+            if not await cls.check_filename_exists(unique_filename=unique_filename, bucket_name=bucket_name):
                 return unique_filename
 
     @classmethod

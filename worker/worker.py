@@ -3,7 +3,11 @@ import asyncio
 import redis
 from rq import Worker, Queue
 from aiogram import Bot
+from aiogram.types import InputFile, FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
+import tempfile
+import requests
+
 
 # Настройки ограничений Telegram
 MAX_MESSAGES_PER_SECOND = 25
@@ -13,58 +17,212 @@ DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
 class TelegramSender:
     def __init__(self):
         self.bot = Bot(token=os.getenv('BOT_TOKEN'))
+        self.file_cache = {}  # Кэш file_id: {file_id: "xxx", file_type: "photo"}
 
-    async def send_message(self, user_id: int, message: str):
-        """Отправка сообщения с обработкой ограничений"""
+    async def upload_file_to_telegram(self, file_data, file_type):
+        """Загружает файл в Telegram и получает file_id"""
+        cache_key = f"{file_data['unique_filename']}_{file_type}"
+
+        # Проверяем кэш
+        if cache_key in self.file_cache:
+            return self.file_cache[cache_key]
+
         try:
-            await self.bot.send_message(chat_id=user_id, text=message)
-            print(f"✅ Message sent to user {user_id}")
-            return True
+            # Скачиваем файл по URL
+            response = requests.get(file_data['url'])
+            response.raise_for_status()
 
-        except TelegramRetryAfter as e:
-            # Превышены лимиты - ждем указанное время
-            wait_time = e.retry_after
-            print(f"⏳ Rate limit hit, waiting {wait_time} seconds")
-            await asyncio.sleep(wait_time)
-            # Пробуем снова
-            return await self.send_message(user_id, message)
+            # Сохраняем во временный файл
+            with tempfile.NamedTemporaryFile(delete=False,
+                                             suffix=os.path.splitext(file_data['filename'])[1]) as temp_file:
+                temp_file.write(response.content)
+                temp_path = temp_file.name
 
-        except TelegramBadRequest as e:
-            # Неверный chat_id или пользователь заблокировал бота
-            print(f"❌ Failed to send to {user_id}: {e}")
-            return False
+            # Загружаем в Telegram
+            if file_type == 'photo':
+                result = await self.bot.send_photo(
+                    chat_id=file_data['test_chat_id'],  # Специальный чат для загрузки
+                    photo=FSInputFile(temp_path)
+                )
+                file_id = result.photo[-1].file_id
+
+            elif file_type == 'video':
+                result = await self.bot.send_video(
+                    chat_id=file_data['test_chat_id'],
+                    video=FSInputFile(temp_path)
+                )
+                file_id = result.video.file_id
+
+            elif file_type == 'audio':
+                result = await self.bot.send_audio(
+                    chat_id=file_data['test_chat_id'],
+                    audio=FSInputFile(temp_path)
+                )
+                file_id = result.audio.file_id
+
+            else:  # document
+                result = await self.bot.send_document(
+                    chat_id=file_data['test_chat_id'],
+                    document=FSInputFile(temp_path)
+                )
+                file_id = result.document.file_id
+
+            # Сохраняем в кэш
+            self.file_cache[cache_key] = {
+                'file_id': file_id,
+                'file_type': file_type
+            }
+
+            # Удаляем временный файл
+            os.unlink(temp_path)
+
+            return self.file_cache[cache_key]
 
         except Exception as e:
-            print(f"⚠️ Unexpected error for user {user_id}: {e}")
-            return False
+            print(f"❌ Failed to upload file to Telegram: {e}")
+            raise
+
+    async def send_content(self, telegram_id, message=None, file_info=None, file_type='document'):
+        """Отправка контента с использованием file_id"""
+        try:
+            if file_info and message:
+                # Отправка файла с подписью
+                if file_type == 'photo':
+                    await self.bot.send_photo(
+                        chat_id=telegram_id,
+                        photo=file_info['file_id'],
+                    )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
+                elif file_type == 'video':
+                    await self.bot.send_video(
+                        chat_id=telegram_id,
+                        video=file_info['file_id'],
+                    )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
+                elif file_type == 'audio':
+                    await self.bot.send_audio(
+                        chat_id=telegram_id,
+                        audio=file_info['file_id'],
+                    )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
+                else:  # document
+                    await self.bot.send_document(
+                        chat_id=telegram_id,
+                        document=file_info['file_id'],
+                    )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
+                print(f"✅ File with message sent to user {telegram_id}")
+
+            elif file_info and not message:
+                # Отправка только файла
+                if file_type == 'photo':
+                    await self.bot.send_photo(
+                        chat_id=telegram_id,
+                        photo=file_info['file_id']
+                    )
+                elif file_type == 'video':
+                    await self.bot.send_video(
+                        chat_id=telegram_id,
+                        video=file_info['file_id']
+                    )
+                elif file_type == 'audio':
+                    await self.bot.send_audio(
+                        chat_id=telegram_id,
+                        audio=file_info['file_id']
+                    )
+                else:  # document
+                    await self.bot.send_document(
+                        chat_id=telegram_id,
+                        document=file_info['file_id']
+                    )
+                print(f"✅ File sent to user {telegram_id}")
+
+            elif message and not file_info:
+                # Отправка только сообщения
+                await self.bot.send_message(chat_id=telegram_id, text=message)
+                print(f"✅ Message sent to user {telegram_id}")
+
+            else:
+                print(f"❌ No content to send to user {telegram_id}")
+                return {"user_id": telegram_id, "status": "failed", "error": "No content provided"}
+
+            return {"user_id": telegram_id, "status": "success"}
+
+        except TelegramRetryAfter as e:
+            wait_time = e.retry_after
+            print(f"⏳ Rate limit hit for user {telegram_id}, waiting {wait_time} seconds")
+            await asyncio.sleep(wait_time)
+            return await self.send_content(telegram_id, message, file_info, file_type)
+
+        except TelegramBadRequest as e:
+            print(f"❌ Failed to send to {telegram_id}: {e}")
+            return {"user_id": telegram_id, "status": "failed", "error": str(e)}
+
+        except Exception as e:
+            print(f"⚠️ Unexpected error for user {telegram_id}: {e}")
+            return {"user_id": telegram_id, "status": "failed", "error": str(e)}
+
+    async def send_bulk_content(self, telegram_ids, message=None, file_data=None, file_type='document'):
+        """Массовая отправка контента с использованием file_id"""
+        results = []
+
+        # Сначала загружаем файл в Telegram (если есть)
+        file_info = None
+        if file_data:
+            try:
+                file_info = await self.upload_file_to_telegram(file_data, file_type)
+                print(f"📁 File uploaded to Telegram, file_id: {file_info['file_id']}")
+            except Exception as e:
+                print(f"❌ Failed to upload file, sending without file: {e}")
+                # Продолжаем отправку только текста, если файл не загрузился
+                if not message:
+                    return [{"user_id": tid, "status": "failed", "error": "File upload failed"} for tid in telegram_ids]
+
+        # Отправляем сообщения всем пользователям
+        for i, telegram_id in enumerate(telegram_ids):
+            if i > 0:
+                await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+
+            result = await self.send_content(telegram_id, message, file_info, file_type)
+            results.append(result)
+
+        return results
 
     async def close(self):
         await self.bot.session.close()
 
 
-def send_telegram_message(user_id: int, message: str):
+def send_telegram_message(telegram_ids, message=None, file_data=None, file_type='document'):
     """
-    Синхронная обертка для асинхронной отправки сообщения
-    Эта функция вызывается RQ Worker
+    Синхронная обертка для асинхронной массовой отправки контента
     """
     sender = TelegramSender()
 
     try:
-        # Создаем и запускаем асинхронную функцию
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
     try:
-        # Добавляем задержку между сообщениями
-        result = loop.run_until_complete(
-            asyncio.gather(
-                asyncio.sleep(DELAY_BETWEEN_MESSAGES),
-                sender.send_message(user_id, message)
-            )
+        results = loop.run_until_complete(
+            sender.send_bulk_content(telegram_ids, message, file_data, file_type)
         )
-        return result[1]  # возвращаем результат отправки
+
+        success_count = sum(1 for r in results if r["status"] == "success")
+        failed_count = len(results) - success_count
+
+        print(f"📊 Bulk send completed: {success_count} successful, {failed_count} failed")
+        return {
+            "total": len(results),
+            "successful": success_count,
+            "failed": failed_count,
+            "details": results
+        }
     finally:
         loop.run_until_complete(sender.close())
 

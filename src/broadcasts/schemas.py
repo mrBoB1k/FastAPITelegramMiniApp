@@ -22,4 +22,4 @@ class TelegramId(BaseModel):
 
 class BroadcastRequest(BaseModel):
     message: str
-    user_ids: list[int]
+    telegram_ids: list[int]

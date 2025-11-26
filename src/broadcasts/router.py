@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException
-from broadcasts.schemas import SendGet, SendGet2, BroadcastRequest
-from broadcasts.repository import Repository
-from broadcasts.redis_queue import message_queue
-import asyncio
+from fastapi import APIRouter, HTTPException, UploadFile, Form, File
 from dotenv import load_dotenv
 import os
-import httpx
 
+from broadcasts.schemas import SendGet, SendGet2, BroadcastRequest, InteractiveId
+from broadcasts.repository import Repository
+from broadcasts.redis_queue import message_queue
+
+from interactivities.repository import Repository as Repository_interactive
+import minios3.services as services
 
 load_dotenv()
 
@@ -19,47 +20,76 @@ router = APIRouter(
 
 
 @router.post('/send')
-async def get_send(input_data: SendGet):
-    user_id = await Repository.get_user_id(input_data.telegram_id)
+async def get_send(
+        telegram_id: int = Form(..., description="ID пользователя Telegram"),
+        interactive_id: list[int] = Form(..., description="список интерактивов"),
+        text: str = Form(..., description="Сообщение от 0 до 4096 знаков"),
+        file: UploadFile = File(default=None, description="Файл (может отсутствовать)")
+):
+    user_id = await Repository.get_user_id(telegram_id)
     if user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    data_id = []
-    for interactive_id_data in input_data.interactive_id:
-        data = await Repository.get_user_id_for_interactive_id(interactive_id_data.id, user_id)
-        data_id = list(set(data_id + data))
+    if len(text) > 4096:
+        raise HTTPException(status_code=409, detail="Message too long")
 
-    request = BroadcastRequest(message= input_data.text, user_ids=data_id)
+    if len(text) == 0:
+        text = None
 
-    job_ids = []
-    for user_id in request.user_ids:
-        job = message_queue.enqueue(
-            'worker.send_telegram_message',  # Имя функции в воркере
-            args=(user_id, request.message),
-            job_timeout=300  # 5 минут timeout
+    data_ids = set()
+    for iid in interactive_id:
+        ids = await Repository.get_telegram_id_for_interactive_id(iid, user_id)
+        data_ids.update(ids)
+
+    data_ids = list(data_ids)
+    if not data_ids:
+        raise HTTPException(404, "No recipients found")
+
+    # Подготовка данных файла
+    file_data = None
+    if file:
+        if file.size > 52428799:
+            raise HTTPException(409, "File too big")
+
+        bucket = "broadcasts"
+        ext = os.path.splitext(file.filename)[1]
+
+        unique = await Repository_interactive.generate_unique_filename(ext=ext, bucket_name=bucket)
+
+        saved_file = await services.save_image_to_minio(
+            file=await file.read(),
+            filename=file.filename,
+            unique_filename=unique,
+            content_type=file.content_type,
+            size=file.size,
+            bucket_name=bucket
         )
-        job_ids.append(job.id)
+
+        await Repository.save_image(saved_file)
+
+        file_data = {
+            "url": f"https://carclicker.ru/{bucket}/{unique}",
+            "filename": file.filename,
+            "unique_filename": unique,
+            "bucket_name": bucket,
+            "content_type": file.content_type,
+            "test_chat_id": os.getenv("TELEGRAM_TEST_CHAT_ID")
+        }
+
+    # Проверяем, что есть что отправлять
+    if not text and not file_data:
+        raise HTTPException(status_code=400, detail="No content to send")
+
+    # Создаем одну задачу для всех пользователей
+    # file_type Тип файла: document, photo, video, audio
+    message_queue.enqueue(
+        'worker.send_telegram_message',
+        args=(data_ids, text, file_data, "document"),
+        job_timeout=300
+    )
 
     return {"status": "Сообщение отправлено"}
 
-#     x = 0
-#     for id in data_id:
-#         x+=1
-#         if x % 100 == 0:
-#             await asyncio.sleep(1)
-#         await send_telegram_message(input_data.text, id)
-#     return {"status": "Сообщение отправлено"}
-#
-#
-# async def send_telegram_message(text: str, telegram_id: int):
-#     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-#     params = {
-#         "chat_id": telegram_id,
-#         "text": text
-#     }
-#     async with httpx.AsyncClient() as client:
-#         response = await client.post(url, params=params)
-#     return response.json()
 
 @router.get("/queue/stats")
 async def get_queue_stats():
@@ -69,18 +99,3 @@ async def get_queue_stats():
         "failed": len(message_queue.failed_job_registry),
         "finished": len(message_queue.finished_job_registry)
     }
-
-
-@router.post('/test')
-async def get_send(input_data: SendGet2):
-    user_id = await Repository.get_user_id(input_data.telegram_id)
-    if user_id is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    job = message_queue.enqueue(
-        'worker.send_telegram_message',  # Имя функции в воркере
-        args=(input_data.telegram_id, input_data.text),
-        job_timeout=300  # 5 минут timeout
-    )
-
-    return {"status": "Сообщение отправлено"}

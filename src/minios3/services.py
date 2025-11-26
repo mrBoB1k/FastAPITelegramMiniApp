@@ -13,9 +13,7 @@ minio_client = Minio(
     secure=False
 )
 
-async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, content_type: str, size: int) -> ImageModel:
-    bucket_name = "images"
-
+async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, content_type: str, size: int, bucket_name: str) -> ImageModel:
     # Создаем бакет если не существует
     try:
         if not minio_client.bucket_exists(bucket_name):
