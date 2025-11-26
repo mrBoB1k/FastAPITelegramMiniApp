@@ -49,3 +49,15 @@ async def delete_image_from_minio(unique_filename: str, bucket_name: str) -> str
         return "True"
     except S3Error as exc:
         return f"{exc}"
+
+
+async def get_image_from_minio(unique_filename: str, bucket_name: str) -> str:
+    # Удаляем объекты из бакета MinIO
+    try:
+        file = minio_client.get_object(
+            bucket_name=bucket_name,
+            object_name=unique_filename
+        )
+        return file
+    except S3Error as exc:
+        return f"{exc}"

@@ -3,45 +3,52 @@ import asyncio
 import redis
 from rq import Worker, Queue
 from aiogram import Bot
-from aiogram.types import InputFile, FSInputFile
+from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
-import tempfile
-import requests
+from minio import Minio
 
 
 # Настройки ограничений Telegram
 MAX_MESSAGES_PER_SECOND = 25
 DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
 
-
 class TelegramSender:
     def __init__(self):
         self.bot = Bot(token=os.getenv('BOT_TOKEN'))
-        self.file_cache = {}  # Кэш file_id: {file_id: "xxx", file_type: "photo"}
+        self.file_cache = {}
+
+        # Инициализация MinIO клиента
+        minio_client = Minio(
+            "minio:9000",
+            access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+            secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+            secure=False
+        )
 
     async def upload_file_to_telegram(self, file_data, file_type):
-        """Загружает файл в Telegram и получает file_id"""
+        """Загружает файл в Telegram и получает file_id используя MinIO клиент"""
         cache_key = f"{file_data['unique_filename']}_{file_type}"
 
         # Проверяем кэш
         if cache_key in self.file_cache:
             return self.file_cache[cache_key]
 
+        temp_path = None
         try:
-            # Скачиваем файл по URL
-            response = requests.get(file_data['url'])
-            response.raise_for_status()
+            # Скачиваем файл из MinIO используя клиент
+            temp_path = f"/tmp/{file_data['unique_filename']}"
 
-            # Сохраняем во временный файл
-            with tempfile.NamedTemporaryFile(delete=False,
-                                             suffix=os.path.splitext(file_data['filename'])[1]) as temp_file:
-                temp_file.write(response.content)
-                temp_path = temp_file.name
+            # Скачиваем объект из MinIO напрямую
+            self.minio_client.fget_object(
+                bucket_name=file_data['bucket_name'],
+                object_name=file_data['unique_filename'],
+                file_path=temp_path
+            )
 
             # Загружаем в Telegram
             if file_type == 'photo':
                 result = await self.bot.send_photo(
-                    chat_id=file_data['test_chat_id'],  # Специальный чат для загрузки
+                    chat_id=file_data['test_chat_id'],
                     photo=FSInputFile(temp_path)
                 )
                 file_id = result.photo[-1].file_id
@@ -73,14 +80,16 @@ class TelegramSender:
                 'file_type': file_type
             }
 
-            # Удаляем временный файл
-            os.unlink(temp_path)
-
+            print(f"✅ File uploaded to Telegram, file_id: {file_id}")
             return self.file_cache[cache_key]
 
         except Exception as e:
             print(f"❌ Failed to upload file to Telegram: {e}")
             raise
+        finally:
+            # Удаляем временный файл
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     async def send_content(self, telegram_id, message=None, file_info=None, file_type='document'):
         """Отправка контента с использованием file_id"""
@@ -175,7 +184,6 @@ class TelegramSender:
         if file_data:
             try:
                 file_info = await self.upload_file_to_telegram(file_data, file_type)
-                print(f"📁 File uploaded to Telegram, file_id: {file_info['file_id']}")
             except Exception as e:
                 print(f"❌ Failed to upload file, sending without file: {e}")
                 # Продолжаем отправку только текста, если файл не загрузился
