@@ -23,18 +23,19 @@ router = APIRouter(
 async def get_send(
         telegram_id: int = Form(..., description="ID пользователя Telegram"),
         interactive_id: list[int] = Form(..., description="список интерактивов"),
-        text: str = Form(..., description="Сообщение от 0 до 4096 знаков"),
-        file: UploadFile = File(default=None, description="Файл (может отсутствовать)")
+        text: str = Form(None, description="Сообщение от 0 до 4096 знаков"),
+        file: UploadFile = File(default=None, description="Файл (может отсутствовать), размер до 50МБ")
 ):
     user_id = await Repository.get_user_id(telegram_id)
     if user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if len(text) > 4096:
-        raise HTTPException(status_code=409, detail="Message too long")
+    if text is not None:
+        if len(text) > 4096:
+            raise HTTPException(status_code=409, detail="Message too long")
 
-    if len(text) == 0:
-        text = None
+        if len(text) == 0:
+            text = None
 
     data_ids = set()
     for iid in interactive_id:
