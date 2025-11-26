@@ -1,29 +1,35 @@
 import os
 import asyncio
 import redis
+import tempfile
 from rq import Worker, Queue
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
-from minio import Minio
-
 
 # Настройки ограничений Telegram
 MAX_MESSAGES_PER_SECOND = 25
 DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
+
 
 class TelegramSender:
     def __init__(self):
         self.bot = Bot(token=os.getenv('BOT_TOKEN'))
         self.file_cache = {}
 
-        # Инициализация MinIO клиента
-        minio_client = Minio(
-            "minio:9000",
-            access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-            secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-            secure=False
-        )
+        # Инициализация MinIO клиента - ПРОСТАЯ ВЕРСИЯ
+        try:
+            from minio import Minio
+            self.minio_client = Minio(
+                "minio:9000",
+                access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+                secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+                secure=False
+            )
+            print("✅ MinIO client initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize MinIO client: {e}")
+            self.minio_client = None
 
     async def upload_file_to_telegram(self, file_data, file_type):
         """Загружает файл в Telegram и получает file_id используя MinIO клиент"""
@@ -33,10 +39,16 @@ class TelegramSender:
         if cache_key in self.file_cache:
             return self.file_cache[cache_key]
 
+        # Проверяем, что MinIO клиент инициализирован
+        if not self.minio_client:
+            raise Exception("MinIO client not available")
+
         temp_path = None
         try:
             # Скачиваем файл из MinIO используя клиент
             temp_path = f"/tmp/{file_data['unique_filename']}"
+
+            print(f"📥 Downloading file from MinIO: {file_data['bucket_name']}/{file_data['unique_filename']}")
 
             # Скачиваем объект из MinIO напрямую
             self.minio_client.fget_object(
@@ -44,6 +56,8 @@ class TelegramSender:
                 object_name=file_data['unique_filename'],
                 file_path=temp_path
             )
+
+            print(f"✅ File downloaded to {temp_path}")
 
             # Загружаем в Telegram
             if file_type == 'photo':
@@ -89,7 +103,11 @@ class TelegramSender:
         finally:
             # Удаляем временный файл
             if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
+                try:
+                    os.unlink(temp_path)
+                    print(f"✅ Temporary file cleaned: {temp_path}")
+                except Exception as e:
+                    print(f"⚠️ Failed to clean temporary file: {e}")
 
     async def send_content(self, telegram_id, message=None, file_info=None, file_type='document'):
         """Отправка контента с использованием file_id"""
@@ -100,30 +118,26 @@ class TelegramSender:
                     await self.bot.send_photo(
                         chat_id=telegram_id,
                         photo=file_info['file_id'],
+                        caption=message
                     )
-                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 elif file_type == 'video':
                     await self.bot.send_video(
                         chat_id=telegram_id,
                         video=file_info['file_id'],
+                        caption=message
                     )
-                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 elif file_type == 'audio':
                     await self.bot.send_audio(
                         chat_id=telegram_id,
                         audio=file_info['file_id'],
+                        caption=message
                     )
-                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 else:  # document
                     await self.bot.send_document(
                         chat_id=telegram_id,
                         document=file_info['file_id'],
+                        caption=message
                     )
-                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 print(f"✅ File with message sent to user {telegram_id}")
 
             elif file_info and not message:
@@ -236,7 +250,7 @@ def send_telegram_message(telegram_ids, message=None, file_data=None, file_type=
 
 
 if __name__ == "__main__":
-    print("🚀 Starting RQ Worker for Telegram messages...")
+    print("🚀 Starting RQ Worker for Telegram bulk messages with MinIO...")
 
     # Подключение к Redis
     redis_conn = redis.Redis(
@@ -249,5 +263,5 @@ if __name__ == "__main__":
     queue = Queue('telegram_messages', connection=redis_conn)
     worker = Worker([queue], connection=redis_conn)
 
-    print("✅ Worker started. Listening for messages...")
+    print("✅ Worker started. Listening for bulk messages...")
     worker.work()
