@@ -118,26 +118,30 @@ class TelegramSender:
                     await self.bot.send_photo(
                         chat_id=telegram_id,
                         photo=file_info['file_id'],
-                        caption=message
                     )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 elif file_type == 'video':
                     await self.bot.send_video(
                         chat_id=telegram_id,
                         video=file_info['file_id'],
-                        caption=message
                     )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 elif file_type == 'audio':
                     await self.bot.send_audio(
                         chat_id=telegram_id,
                         audio=file_info['file_id'],
-                        caption=message
                     )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 else:  # document
                     await self.bot.send_document(
                         chat_id=telegram_id,
                         document=file_info['file_id'],
-                        caption=message
                     )
+                    await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+                    await self.bot.send_message(chat_id=telegram_id, text=message)
                 print(f"✅ File with message sent to user {telegram_id}")
 
             elif file_info and not message:
