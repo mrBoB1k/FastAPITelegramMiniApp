@@ -48,7 +48,7 @@ class TelegramSender:
             # Скачиваем файл из MinIO используя клиент
             temp_path = f"/tmp/{file_data['unique_filename']}"
 
-            print(f"📥 Downloading file from MinIO: {file_data['bucket_name']}/{file_data['unique_filename']}")
+            print(f"📥 Downloading file from MinIO: {file_data['bucket_name']}/{file_data['filename']}")
 
             # Скачиваем объект из MinIO напрямую
             self.minio_client.fget_object(
