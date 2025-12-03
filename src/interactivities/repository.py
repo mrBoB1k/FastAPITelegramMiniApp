@@ -3,7 +3,10 @@ from typing import List
 from sqlalchemy import select, delete, case
 from database import new_session
 from models import *
+
 from datetime import datetime
+import pytz
+
 from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, \
     Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractives, FilterEnum, \
     InteractiveList
@@ -193,7 +196,17 @@ class Repository:
             interactives_list = []
             for interactive in interactives_data:
                 # Используем уже вычисленное поле display_date
-                date_str = interactive.display_date.strftime("%d.%m.%y %H:%M") if interactive.display_date else None
+                # date_str = interactive.display_date.strftime("%d.%m.%y %H:%M") if interactive.display_date else None
+
+                if interactive.display_date.tzinfo is None:
+                    # Сначала добавляем UTC, затем конвертируем
+                    utc_time = pytz.UTC.localize(interactive.display_date)
+                    yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))
+                    date_str = yekat_time.strftime("%d.%m.%y %H:%M")
+                else:
+                    # Если уже с часовым поясом, просто конвертируем
+                    yekat_time = interactive.display_date.astimezone(pytz.timezone('Asia/Yekaterinburg'))
+                    date_str = yekat_time.strftime("%d.%m.%y %H:%M")
 
                 interactives_list.append(InteractiveList(
                     title=interactive.title,
