@@ -5,7 +5,6 @@ WORKDIR /app
 # Копируем зависимости сначала для кэширования
 COPY requirements.txt .
 
-# Устанавливаем зависимости для PostgreSQL
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем исходный код
