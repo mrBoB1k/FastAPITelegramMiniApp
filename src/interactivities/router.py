@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
 import json
@@ -137,7 +139,7 @@ async def creat_interactive(
             ext = mime_to_ext.get(content_type, "bin")
 
             # Генерируем уникальное имя файла
-            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name="images")
+            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name=os.getenv("IMAGE_BUCKET_NAME"))
             filename = image.filename
 
             data = MinioData(file=await image.read(), filename=filename, unique_filename=unique_filename,
@@ -152,7 +154,7 @@ async def creat_interactive(
                 unique_filename=image_data_first.unique_filename,
                 content_type=image_data_first.content_type,
                 size=image_data_first.size,
-                bucket_name="images"
+                bucket_name=os.getenv("IMAGE_BUCKET_NAME")
             )
             images_data_second.append(image_data_second)
 
@@ -332,7 +334,7 @@ async def patch_interactive(
             ext = mime_to_ext.get(content_type, "bin")
 
             # Генерируем уникальное имя файла
-            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name="images")
+            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name=os.getenv("IMAGE_BUCKET_NAME"))
             filename = image.filename
 
             data = MinioData(file=await image.read(), filename=filename, unique_filename=unique_filename,
@@ -347,7 +349,7 @@ async def patch_interactive(
                 unique_filename=image_data_first.unique_filename,
                 content_type=image_data_first.content_type,
                 size=image_data_first.size,
-                bucket_name="images"
+                bucket_name=os.getenv("IMAGE_BUCKET_NAME")
             )
             images_data_second.append(image_data_second)
 
