@@ -1,8 +1,8 @@
 FROM postgres:15-alpine
 
 # Настройки (можно задать через environment)
-ENV DB_NAME=myapp_db
-ENV DB_USER=myapp_user
-ENV DB_PASSWORD=secure_password
+ENV POSTGRES_DB=myapp_db
+ENV POSTGRES_USER=myapp_user
+ENV POSTGRES_PASSWORD=secure_password
 
 EXPOSE 5432
