@@ -11,18 +11,11 @@ from botocore.exceptions import ClientError
 session = boto3.session.Session()
 s3 = session.client(
     service_name='s3',
-    endpoint_url=os.getenv("BOTO3_ENDPOINT_URL"),
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+    endpoint_url=os.environ["BOTO3_ENDPOINT_URL"],
+    aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
 )
 
-# # Конфигурация MinIO
-# minio_client = Minio(
-#     "minio:9000",
-#     access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-#     secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-#     secure=False
-# )
 
 async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, content_type: str, size: int, bucket_name: str) -> ImageModel:
     # Создаем бакет если не существует

@@ -4,8 +4,8 @@ import os
 
 # Подключение к Redis
 redis_conn = redis.Redis(
-    host=os.getenv('REDIS_HOST', 'redis'),
-    port=int(os.getenv('REDIS_PORT', 6379)),
+    host=os.environ['REDIS_HOST'],
+    port=int(os.environ['REDIS_PORT']),
     db=0,
     decode_responses=True
 )

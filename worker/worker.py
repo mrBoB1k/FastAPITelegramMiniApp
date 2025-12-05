@@ -16,15 +16,15 @@ DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
 
 class TelegramSender:
     def __init__(self):
-        self.bot = Bot(token=os.getenv('BOT_TOKEN'))
+        self.bot = Bot(token=os.environ['BOT_TOKEN'])
         self.file_cache = {}
 
         try:
             self.s3_client = boto3.client(
                 service_name='s3',
-                endpoint_url=os.getenv("BOTO3_ENDPOINT_URL"),
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+                endpoint_url=os.environ["BOTO3_ENDPOINT_URL"],
+                aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
             )
 
             # Проверяем подключение
@@ -267,8 +267,8 @@ if __name__ == "__main__":
 
     # Подключение к Redis
     redis_conn = redis.Redis(
-        host=os.getenv('REDIS_HOST', 'redis'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
+        host=os.environ['REDIS_HOST'],
+        port=int(os.environ['REDIS_PORT']),
         db=0
     )
 
