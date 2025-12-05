@@ -1,6 +1,5 @@
 FROM redis:7-alpine
 
-# Копируем конфигурацию
-COPY redis.conf /usr/local/etc/redis/redis.conf
-
-CMD ["redis-server", "/usr/local/etc/redis/redis.conf"]
+# Отключаем protected-mode для доступа извне
+# Или оставляем для безопасности в продакшене
+CMD ["redis-server", "--bind", "0.0.0.0"]
