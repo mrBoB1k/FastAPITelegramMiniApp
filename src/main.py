@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-_SECRET_KEY = os.getenv('SECRET_KEY')
+_SECRET_KEY = os.environ['SECRET_KEY']
 
 
 async def verify_key(x_key: str):

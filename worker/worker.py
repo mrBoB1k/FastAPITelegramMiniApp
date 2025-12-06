@@ -6,6 +6,8 @@ from rq import Worker, Queue
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
+import boto3
+
 
 # Настройки ограничений Telegram
 MAX_MESSAGES_PER_SECOND = 25
@@ -14,22 +16,29 @@ DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
 
 class TelegramSender:
     def __init__(self):
-        self.bot = Bot(token=os.getenv('BOT_TOKEN'))
+        self.bot = Bot(token=os.environ['BOT_TOKEN'])
         self.file_cache = {}
 
-        # Инициализация MinIO клиента - ПРОСТАЯ ВЕРСИЯ
         try:
-            from minio import Minio
-            self.minio_client = Minio(
-                "minio:9000",
-                access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-                secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-                secure=False
+            self.s3_client = boto3.client(
+                service_name='s3',
+                endpoint_url=os.environ["BOTO3_ENDPOINT_URL"],
+                aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
             )
-            print("✅ MinIO client initialized successfully")
+
+            # Проверяем подключение
+            try:
+                # Пробуем получить список бакетов для проверки подключения
+                self.s3_client.list_buckets()
+                print("✅ S3 client (boto3) initialized successfully")
+            except Exception as e:
+                print(f"⚠️ S3 client created but connection test failed: {e}")
+                print("Continuing anyway, connection will be tested on first use")
+
         except Exception as e:
-            print(f"❌ Failed to initialize MinIO client: {e}")
-            self.minio_client = None
+            print(f"❌ Failed to initialize S3 client: {e}")
+            self.s3_client = None
 
     async def upload_file_to_telegram(self, file_data, file_type):
         """Загружает файл в Telegram и получает file_id используя MinIO клиент"""
@@ -40,7 +49,7 @@ class TelegramSender:
             return self.file_cache[cache_key]
 
         # Проверяем, что MinIO клиент инициализирован
-        if not self.minio_client:
+        if not self.s3_client:
             raise Exception("MinIO client not available")
 
         temp_path = None
@@ -51,10 +60,10 @@ class TelegramSender:
             print(f"📥 Downloading file from MinIO: {file_data['bucket_name']}/{file_data['unique_filename']}")
 
             # Скачиваем объект из MinIO напрямую
-            self.minio_client.fget_object(
-                bucket_name=file_data['bucket_name'],
-                object_name=file_data['unique_filename'],
-                file_path=temp_path
+            self.s3_client.download_file(
+                Bucket=file_data['bucket_name'],
+                Key=file_data['unique_filename'],
+                Filename=temp_path
             )
 
             print(f"✅ File downloaded to {temp_path}")
@@ -258,8 +267,8 @@ if __name__ == "__main__":
 
     # Подключение к Redis
     redis_conn = redis.Redis(
-        host=os.getenv('REDIS_HOST', 'redis'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
+        host=os.environ['REDIS_HOST'],
+        port=int(os.environ['REDIS_PORT']),
         db=0
     )
 

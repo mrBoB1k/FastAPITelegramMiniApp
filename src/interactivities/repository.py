@@ -269,7 +269,7 @@ class Repository:
                     )
                     image_data = image_result.scalars().first()
                     if image_data is not None:
-                        image = f"https://carclicker.ru/{image_data.bucket_name}/{image_data.unique_filename}"
+                        image = F"https://storage.yandexcloud.net/{image_data.bucket_name}/{image_data.unique_filename}"
 
                 questions_data.append(
                     QuestionFull(

@@ -11,7 +11,7 @@ import minios3.services as services
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 router = APIRouter(
     prefix="/api/broadcasts",
@@ -55,7 +55,7 @@ async def get_send(
 
         file_type = await determine_file_type(file, file.size)
 
-        bucket = "broadcasts"
+        bucket = os.environ["BROADCASTS_BUCKET_NAME"]
         ext = os.path.splitext(file.filename)[1]
 
         unique = await Repository_interactive.generate_unique_filename(ext=ext[1:], bucket_name=bucket)
@@ -72,12 +72,12 @@ async def get_send(
         await Repository.save_image(saved_file)
 
         file_data = {
-            "url": f"https://carclicker.ru/{bucket}/{unique}",
+            "url": f"https://storage.yandexcloud.net/{bucket}/{unique}",
             "filename": file.filename,
             "unique_filename": unique,
             "bucket_name": bucket,
             "content_type": file.content_type,
-            "test_chat_id": os.getenv("TELEGRAM_TEST_CHAT_ID")
+            "test_chat_id": os.environ["TELEGRAM_TEST_CHAT_ID"]
         }
 
     # Проверяем, что есть что отправлять
