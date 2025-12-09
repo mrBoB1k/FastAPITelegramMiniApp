@@ -6,8 +6,8 @@ def get_host_keyboard():
     kb = [
         [types.KeyboardButton(text="Управление интерактивами")],
         [types.KeyboardButton(text="Подключение к интерактиву")],
-        [types.KeyboardButton(text="Получить роль участника для комиссий урфу")],
-        [types.KeyboardButton(text="Test")]
+        [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
+        # [types.KeyboardButton(text="Test")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=kb,

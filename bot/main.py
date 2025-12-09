@@ -62,11 +62,11 @@ async def start_cmd(message: Message):
     if await get_role(message) == "leader":
         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_main_menu())
 
-@router.message(F.text == "Test")
-async def start_cmd(message: Message):
-    role = await get_role(message)
-    if await get_role(message) == "leader":
-        await message.answer("Панель управления интерактивами", reply_markup=get_link_to_test())
+# @router.message(F.text == "Test")
+# async def start_cmd(message: Message):
+#     role = await get_role(message)
+#     if await get_role(message) == "leader":
+#         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_test())
 
 @router.message(F.text == "Подключение к интерактиву")
 async def start_cmd(message: Message, state: FSMContext):
