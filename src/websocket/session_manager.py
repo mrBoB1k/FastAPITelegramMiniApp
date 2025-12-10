@@ -52,10 +52,9 @@ class SessionManager:
                 await websocket.accept()
                 target_conn.websocket = websocket
             else:
-
                 if await self.interactive_sessions[
                     interactive_id].get_stage() != Stage.WAITING and not await Repository.check_register_quiz_participant(
-                    CreateQuizParticipant(user_id=user_id, interactive_id=interactive_id)):
+                    CreateQuizParticipant(user_id=user_id, interactive_id=interactive_id, total_time=0)):
                     raise WebSocketException(code=4003, reason="Interactive running now")
                 else:
                     await websocket.accept()
