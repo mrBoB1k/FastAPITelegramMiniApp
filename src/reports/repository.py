@@ -117,6 +117,13 @@ class Repository:
             return None
         return date_obj.strftime('%d.%m.%Y')
 
+    @staticmethod
+    def _format_date3(date_obj: datetime | None) -> str | None:
+        """Преобразует datetime в строку формата 'день.месяц.год' (23.05.2025)"""
+        if date_obj is None:
+            return None
+        return date_obj.strftime('%d.%m.%Y_%H:%M')
+
     @classmethod
     async def get_export_for_leader(cls, interactive_id: int) -> ExportForLeaderData:
         async with new_session() as session:
@@ -268,7 +275,7 @@ class Repository:
             )
             data = result.scalar_one_or_none()
             if data is not None:
-                return DateTitleSH(title=data.title, date_completed=cls._format_date2(data.date_completed))
+                return DateTitleSH(title=data.title, date_completed=cls._format_date3(data.date_completed))
             return data
 
 

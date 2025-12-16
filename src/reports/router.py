@@ -89,13 +89,13 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                 ])
 
         # Возвращаем файл
-        filename = "analytics_report.xlsx"
+        filename = "PRC_analytics_report.xlsx"
         if len(input_data.interactive_id) == 1:
             data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
             if data_title_date:
                 translit_title = smart_translit(data_title_date.title).lower().replace(' ', '_')
                 translit_title = re.sub(r'[^\w_]', '', translit_title)
-                filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
+                filename = f"PRC_{translit_title}_{data_title_date.date_completed}.xlsx"
 
 
         file_bytes = save_virtual_workbook(wb)
@@ -546,13 +546,13 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
 
                     current_col += 4
 
-        filename = "leader_report.xlsx"
+        filename = "LDR_leader_report.xlsx"
         if len(input_data.interactive_id) == 1:
             data_title_date = await Repository.get_title_and_date_for_interactive(input_data.interactive_id[0].id)
             if data_title_date:
                 translit_title = smart_translit(data_title_date.title).lower().replace(' ', '_')
                 translit_title = re.sub(r'[^\w_]', '', translit_title)
-                filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
+                filename = f"LDR_{translit_title}_{data_title_date.date_completed}.xlsx"
 
         file_bytes = save_virtual_workbook(wb)
 
