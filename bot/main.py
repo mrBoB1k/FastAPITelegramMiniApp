@@ -68,7 +68,7 @@ async def start_cmd(message: Message):
 #     if await get_role(message) == "leader":
 #         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_test())
 
-@router.message(F.text == "Подключение к интерактиву")
+@router.message(F.text == "Ввести код подключения")
 async def start_cmd(message: Message, state: FSMContext):
     role = await get_role(message)
     await state.set_state(CodeInput.waiting_for_code)
@@ -136,7 +136,7 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
         if await process_code(param, message, state):
             return
         await message.answer(
-            "Код неверный, попробуйте ввести его вручную. Сначала нажмите кнопку \"Подключение к интерактиву\""
+            "Код неверный, попробуйте ввести его вручную. Сначала нажмите кнопку \"Ввести код подключения\""
         )
 
 async def process_code(code: str, message: Message, state: FSMContext):
@@ -157,7 +157,7 @@ async def process_code(code: str, message: Message, state: FSMContext):
     if attempts >= MAX_ATTEMPTS:
         await state.clear()
         await message.answer(
-            "Попробуйте еще раз, нажав кнопку «Подключение к интерактиву»"
+            "Попробуйте еще раз, нажав кнопку \"Ввести код подключения\""
         )
     else:
         await state.update_data(attempts=attempts)

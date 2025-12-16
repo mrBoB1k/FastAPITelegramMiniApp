@@ -549,6 +549,7 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
             'Content-Disposition': f'attachment; filename="{filename}"',
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         }
+
         return StreamingResponse(output, headers=headers)
 
     else:

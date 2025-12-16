@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 def get_host_keyboard():
     kb = [
         [types.KeyboardButton(text="Управление интерактивами")],
-        [types.KeyboardButton(text="Подключение к интерактиву")],
+        [types.KeyboardButton(text="Ввести код подключения")],
         [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
         # [types.KeyboardButton(text="Test")]
     ]
@@ -18,7 +18,7 @@ def get_host_keyboard():
 
 def get_member_keyboard():
     kb = [
-        [types.KeyboardButton(text="Подключение к интерактиву")],
+        [types.KeyboardButton(text="Ввести код подключения")],
         [types.KeyboardButton(text="Получить роль ведущего для комиссий урфу")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
@@ -46,7 +46,7 @@ def get_link_to_main_menu():
         [
             InlineKeyboardButton(
                 text="Нажмите, чтобы войти 🌐",
-                web_app=WebAppInfo(url="https://voshod07.ru/leader/main_menu")
+                web_app=WebAppInfo(url="https://voshod07.ru/leader/new_interactives")
             )
         ]
     ])
