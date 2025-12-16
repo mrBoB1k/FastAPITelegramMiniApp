@@ -4,6 +4,8 @@ import io
 from fastapi import UploadFile, HTTPException
 import os
 from minios3.schemas import ImageModel
+import transliterate
+import re
 
 # Конфигурация MinIO
 minio_client = Minio(
@@ -21,6 +23,9 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
     except S3Error as exc:
         raise HTTPException(status_code=500, detail=f"Error creating bucket: {exc}")
 
+    translit_title = smart_translit(filename).lower().replace(' ', '_')
+    translit_title = re.sub(r'[^\w_]', '', translit_title)
+
     # Загружаем в MinIO
     try:
         minio_client.put_object(
@@ -30,7 +35,7 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
             length=size,
             content_type=content_type,
             metadata={
-                "original-filename": filename
+                "original-filename": translit_title
             }
         )
     except S3Error as exc:
@@ -61,3 +66,23 @@ async def get_image_from_minio(unique_filename: str, bucket_name: str) -> str:
         return file
     except S3Error as exc:
         return f"{exc}"
+
+
+def smart_translit(text):
+    words = re.findall(r'([а-яА-ЯёЁ]+|\w+|[^\w\s]+|\s+)', text)
+    result = []
+
+    for word in words:
+        # Если слово содержит кириллицу — транслитерируем
+        if re.search(r'[а-яА-ЯёЁ]', word):
+            try:
+                translit_word = transliterate.translit(word, 'ru', reversed=True)
+                translit_word = translit_word.replace("'", "").replace('"', '')
+                result.append(translit_word)
+            except Exception as e:
+                print(f"Transliteration error for '{word}': {e}")
+                result.append(word)  # Если ошибка — оставляем как есть
+        else:
+            result.append(word)  # Английские слова и символы оставляем
+
+    return ''.join(result)

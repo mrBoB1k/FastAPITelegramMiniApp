@@ -96,3 +96,7 @@ class ExportForLeaderData(BaseModel):
 class DateTitleSH(BaseModel):
     title: str
     date_completed: str
+
+
+class ReturnUrl(BaseModel):
+    url: str

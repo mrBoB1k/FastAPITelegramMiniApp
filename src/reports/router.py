@@ -3,8 +3,15 @@ from fastapi.responses import StreamingResponse
 from typing import Annotated
 
 from interactivities.schemas import InteractiveType
-from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum
+from interactivities.repository import Repository as Repository_interactive
+
+from broadcasts.repository import Repository as Repository_broadcasts
+
+from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum, ReturnUrl
 from reports.repository import Repository
+
+import minios3.services as services
+
 import io
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -13,6 +20,7 @@ from openpyxl.writer.excel import save_virtual_workbook
 import transliterate
 import re
 from datetime import time
+
 
 router = APIRouter(
     prefix="/api/reports",
@@ -31,7 +39,7 @@ router = APIRouter(
 
 
 @router.post("/export")
-async def get_export(input_data: ExportGet) -> StreamingResponse:
+async def get_export(input_data: ExportGet) -> ReturnUrl:
     user_id = await Repository.get_user_id(input_data.telegram_id)
     if user_id is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -39,8 +47,10 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
     for interactive_id in input_data.interactive_id:
         flag = await Repository.check_user_conducted_interactive(user_id=user_id, interactive_id=interactive_id.id)
         if not flag:
-            raise HTTPException(status_code=404, detail=f"interactive id {interactive_id.id} not found for user {input_data.telegram_id}, or not conducted")
+            raise HTTPException(status_code=404,
+                                detail=f"interactive id {interactive_id.id} not found for user {input_data.telegram_id}, or not conducted")
 
+    bucket = "reports"
 
     if input_data.report_type == ExportEnum.forAnalise.value:
         wb = Workbook()
@@ -87,14 +97,18 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                 translit_title = re.sub(r'[^\w_]', '', translit_title)
                 filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
 
-        headers = {
-            'Content-Disposition': f'attachment; filename="{filename}"',
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        }
-        return StreamingResponse(
-            io.BytesIO(save_virtual_workbook(wb)),
-            headers=headers
-        )
+
+        file_bytes = save_virtual_workbook(wb)
+
+        unique = await Repository_interactive.generate_unique_filename(ext="xlsx", bucket_name=bucket)
+
+        saved_file = await services.save_image_to_minio(file=file_bytes, filename=filename, unique_filename="",
+                                                  content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                  size=len(file_bytes), bucket_name=bucket)
+
+        await Repository_broadcasts.save_image(saved_file)
+
+        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}")
 
     elif input_data.report_type == ExportEnum.forLeader.value:
         wb = Workbook()
@@ -156,7 +170,6 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                     cell.border = Border(top=thin_side, left=medium_side, right=medium_side, bottom=thin_side)
                     ws.merge_cells(start_row=12, start_column=current_col, end_row=12,
                                    end_column=current_col + answer_count)
-
 
                     # добавляем Время на ответ (строка 14)
                     cell = ws.cell(row=13, column=current_col + answer_count, value=f"Время на ответ")
@@ -501,9 +514,10 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
 
                     cell20 = ws.cell(row=stats_row + 1, column=current_col, value="")
                     if question.id in dict_text_true_answer:
-                        cell21 = ws.cell(row=stats_row + 1, column=current_col + 1, value=dict_text_true_answer[question.id])
+                        cell21 = ws.cell(row=stats_row + 1, column=current_col + 1,
+                                         value=dict_text_true_answer[question.id])
                     else:
-                        cell21 = ws.cell(row=stats_row + 1, column=current_col + 1,value=0)
+                        cell21 = ws.cell(row=stats_row + 1, column=current_col + 1, value=0)
                     cell22 = ws.cell(row=stats_row + 1, column=current_col + 2, value="")
                     cell23 = ws.cell(row=stats_row + 1, column=current_col + 3, value="")
                     cell20.fill = statistic_fill
@@ -525,17 +539,12 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                     cell31.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
                     cell32.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
                     cell33 = ws.cell(row=stats_row + 2, column=current_col + 3,
-                                   value=f"=AVERAGE({get_column_letter(current_col + 3)}{first_row}:{get_column_letter(current_col + 3)}{last_row})")
+                                     value=f"=AVERAGE({get_column_letter(current_col + 3)}{first_row}:{get_column_letter(current_col + 3)}{last_row})")
                     cell33.fill = statistic_time_fill
                     cell33.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=medium_side)
                     cell33.number_format = 'mm:ss'
 
                     current_col += 4
-
-        # Возвращаем файл как поток
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
 
         filename = "leader_report.xlsx"
         if len(input_data.interactive_id) == 1:
@@ -545,12 +554,17 @@ async def get_export(input_data: ExportGet) -> StreamingResponse:
                 translit_title = re.sub(r'[^\w_]', '', translit_title)
                 filename = f"{translit_title}_{data_title_date.date_completed}.xlsx"
 
-        headers = {
-            'Content-Disposition': f'attachment; filename="{filename}"',
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        }
+        file_bytes = save_virtual_workbook(wb)
 
-        return StreamingResponse(output, headers=headers)
+        unique = await Repository_interactive.generate_unique_filename(ext="xlsx", bucket_name=bucket)
+
+        saved_file = await services.save_image_to_minio(file=file_bytes, filename=filename, unique_filename=unique,
+                                                        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                        size=len(file_bytes), bucket_name=bucket)
+
+        await Repository_broadcasts.save_image(saved_file)
+
+        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}")
 
     else:
         raise HTTPException(status_code=400, detail="Invalid export type")
