@@ -108,7 +108,7 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
 
         await Repository_broadcasts.save_image(saved_file)
 
-        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}")
+        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}", name=filename)
 
     elif input_data.report_type == ExportEnum.forLeader.value:
         wb = Workbook()
@@ -564,7 +564,7 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
 
         await Repository_broadcasts.save_image(saved_file)
 
-        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}")
+        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}", name=filename)
 
     else:
         raise HTTPException(status_code=400, detail="Invalid export type")

@@ -100,3 +100,4 @@ class DateTitleSH(BaseModel):
 
 class ReturnUrl(BaseModel):
     url: str
+    name: str
