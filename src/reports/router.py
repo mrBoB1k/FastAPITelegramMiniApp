@@ -102,7 +102,7 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
 
         unique = await Repository_interactive.generate_unique_filename(ext="xlsx", bucket_name=bucket)
 
-        saved_file = await services.save_image_to_minio(file=file_bytes, filename=filename, unique_filename="",
+        saved_file = await services.save_image_to_minio(file=file_bytes, filename=filename, unique_filename=unique,
                                                   content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                                   size=len(file_bytes), bucket_name=bucket)
 
