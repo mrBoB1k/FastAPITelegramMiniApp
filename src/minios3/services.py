@@ -23,7 +23,13 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
     except S3Error as exc:
         raise HTTPException(status_code=500, detail=f"Error creating bucket: {exc}")
 
-    translit_title = smart_translit(filename).lower().replace(' ', '_')
+    if '.' in filename:
+        name_part, extension_part = filename.rsplit('.', 1)
+    else:
+        name_part = filename
+        extension_part = ""
+
+    translit_title = smart_translit(name_part).lower().replace(' ', '_')
     translit_title = re.sub(r'[^\w_]', '', translit_title)
 
     # Загружаем в MinIO
@@ -35,7 +41,7 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
             length=size,
             content_type=content_type,
             metadata={
-                "original-filename": translit_title
+                "original-filename": f"{translit_title}.{extension_part}"
             }
         )
     except S3Error as exc:
