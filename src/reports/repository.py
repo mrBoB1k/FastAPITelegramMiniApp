@@ -131,7 +131,7 @@ class Repository:
         utc_time = pytz.UTC.localize(date_obj)
         yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))
 
-        return yekat_time.strftime('%d.%m.%Y_%H:%M')
+        return yekat_time.strftime('%d.%m.%Y_%H-%M')
 
     @classmethod
     async def get_export_for_leader(cls, interactive_id: int) -> ExportForLeaderData:
