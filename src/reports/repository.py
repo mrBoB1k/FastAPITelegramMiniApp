@@ -1,3 +1,4 @@
+import pytz
 from sqlalchemy import select, and_
 from database import new_session
 from models import *
@@ -115,14 +116,22 @@ class Repository:
         """Преобразует datetime в строку формата 'день.месяц.год' (23.05.2025)"""
         if date_obj is None:
             return None
-        return date_obj.strftime('%d.%m.%Y')
+
+        utc_time = pytz.UTC.localize(date_obj)
+        yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))\
+
+        return yekat_time.strftime('%d.%m.%Y')
 
     @staticmethod
     def _format_date3(date_obj: datetime | None) -> str | None:
         """Преобразует datetime в строку формата 'день.месяц.год' (23.05.2025)"""
         if date_obj is None:
             return None
-        return date_obj.strftime('%d.%m.%Y_%H:%M')
+
+        utc_time = pytz.UTC.localize(date_obj)
+        yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))
+
+        return yekat_time.strftime('%d.%m.%Y_%H:%M')
 
     @classmethod
     async def get_export_for_leader(cls, interactive_id: int) -> ExportForLeaderData:
