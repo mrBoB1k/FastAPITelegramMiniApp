@@ -75,23 +75,23 @@ async def start_cmd(message: Message, state: FSMContext):
     await state.update_data(attempts=0)
     await message.answer("Введите код для подключения к интерактиву")
 
-# @router.message(F.text == "Получить роль ведущего для комиссий урфу")
-# async def get_leader_role(message: Message):
-#     role = await get_role(message)
-#     success = await change_user_role(message.from_user.id, "leader")
-#     if success:
-#         await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
-#     else:
-#         await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
-#
-# @router.message(F.text == "Получить роль участника для комиссий урфу")
-# async def get_participant_role(message: Message):
-#     role = await get_role(message)
-#     success = await change_user_role(message.from_user.id, "participant")
-#     if success:
-#         await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
-#     else:
-#         await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
+@router.message(F.text == "Получить роль ведущего для комиссий урфу")
+async def get_leader_role(message: Message):
+    role = await get_role(message)
+    success = await change_user_role(message.from_user.id, "leader")
+    if success:
+        await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
+    else:
+        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
+
+@router.message(F.text == "Получить роль участника для комиссий урфу")
+async def get_participant_role(message: Message):
+    role = await get_role(message)
+    success = await change_user_role(message.from_user.id, "participant")
+    if success:
+        await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
+    else:
+        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
 
 @router.message(CodeInput.waiting_for_code)
 async def handle_code_input(message: Message, state: FSMContext):
