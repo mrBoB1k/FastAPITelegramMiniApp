@@ -1,11 +1,12 @@
+from fastapi import UploadFile, HTTPException
 from minio import Minio
 from minio.error import S3Error
 import io
-from fastapi import UploadFile, HTTPException
 import os
-from minios3.schemas import ImageModel
 import transliterate
 import re
+
+from minios3.schemas import ImageModel
 
 # Конфигурация MinIO
 minio_client = Minio(

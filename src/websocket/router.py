@@ -1,8 +1,10 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException, status
 from websocket.repository import Repository
-from users.schemas import UserRoleEnum
+from models import UserRoleEnum
 from websocket.session_manager import SessionManager
 from websocket.schemas import LeaderSent, ParticipantSent, CreateQuizParticipant
+
+from organizations.repository import Repository as Repository_Organization
 
 router = APIRouter(
     prefix="/ws",
@@ -24,16 +26,22 @@ async def websocket_endpoint(
     if await Repository.get_interactive_conducted(interactive_id):
         raise WebSocketException(code=4003, reason="Interactive already end")
 
-    user_id = await Repository.get_user_id(telegram_id)
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id)
     if user_id is None:
         raise WebSocketException(code=4003, reason="User not found")
 
-    if role == UserRoleEnum.leader and not (await Repository.check_interactive_creates(interactive_id, user_id)):
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="User does not have access")
+
+    if role != UserRoleEnum.participant:
+        organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(user_id)
+        if organization_data is None:
+            raise WebSocketException(code=4003, reason="Organization participant not found")
+
+        if not (await Repository.check_interactive_creates(interactive_id, organization_data.organization_participant_id)):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="User does not have access")
 
     await manager.connect(websocket, interactive_id, user_id, role)
     try:
-        if role == UserRoleEnum.leader:
+        if role != UserRoleEnum.participant:
             while True:
                 data = await websocket.receive_json()
                 leader_sent = LeaderSent(**data)

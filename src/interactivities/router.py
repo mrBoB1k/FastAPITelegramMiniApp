@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Form, File
 from typing import Annotated, List, Optional
 import json
-from pydantic import ValidationError
 
-from interactivities.schemas import ReceiveInteractive, InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
+from interactivities.schemas import InteractiveId, InteractiveCreate, MyInteractives, TelegramId, \
     InteractiveCode, Interactive, InteractiveType, MinioData, GetDataInteractive
 from interactivities.repository import Repository
 
@@ -14,8 +13,9 @@ from websocket.InteractiveSession import Stage
 from websocket.schemas import StageEnd, DataStageEnd, Winner
 from websocket.repository import Repository as Repository_Websocket
 
-
 import minios3.services as services
+
+from organizations.repository import Repository as Repository_Organization
 
 router = APIRouter(
     prefix="/api/interactivities",
@@ -46,13 +46,21 @@ async def creat_interactive(
     except Exception as e:
         return {"error": str(e)}
 
-    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id)
-    if user_id_role is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_id_role.role != UserRoleEnum.leader:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
+    # user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id)
+    # if user_id_role is None:
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # if user_id_role.role != UserRoleEnum.leader:
+    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can create interactives")
+    #
+    # user_id = user_id_role.user_id
 
-    user_id = user_id_role.user_id
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id)
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    organization_participant_id = await Repository_Organization.get_organization_participant_id_by_user_id(user_id)
+    if organization_participant_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
     count_images = 0
 
@@ -137,7 +145,7 @@ async def creat_interactive(
             ext = mime_to_ext.get(content_type, "bin")
 
             # Генерируем уникальное имя файла
-            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name="images")
+            unique_filename = await Repository.generate_unique_filename(ext=ext, bucket_name="images")
             filename = image.filename
 
             data = MinioData(file=await image.read(), filename=filename, unique_filename=unique_filename,
@@ -162,7 +170,7 @@ async def creat_interactive(
         data=InteractiveCreate(
             **interactive.model_dump(),
             code=code,
-            created_by_id=user_id
+            created_by_id=organization_participant_id
         ),
         images=images_data_second
     )
@@ -177,11 +185,18 @@ async def get_me(
         raise HTTPException(status_code=404,
                             detail=f"Invalid input data: from_number {data.from_number} and to_number {data.to_number} are invalid")
 
-    user_id = await Repository.get_user_id(data.telegram_id)
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(data.telegram_id)
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    result = await Repository.get_interactives(user_id=user_id, filter=data.filter, from_number=data.from_number,
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
+
+    result = await Repository.get_interactives(organization_id=organization_data.organization_id,
+                                               organization_participant_id=organization_data.organization_participant_id,
+                                               filter=data.filter, from_number=data.from_number,
                                                to_number=data.to_number)
     return result
 
@@ -204,17 +219,27 @@ async def get_interactive(
         interactive_id: Annotated[InteractiveId, Depends()],
         telegram_id: Annotated[TelegramId, Depends()],
 ) -> Interactive:
-    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
-    if user_id_role is None:
+    # user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
+    # if user_id_role is None:
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # if user_id_role.role != UserRoleEnum.leader:
+    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get info interactives")
+    # user_id = user_id_role.user_id
+
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id.telegram_id)
+    if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_id_role.role != UserRoleEnum.leader:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get info interactives")
 
-    user_id = user_id_role.user_id
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
-    info = await Repository.get_all_interactive_info(user_id, interactive_id.interactive_id)
+    info = await Repository.get_all_interactive_info(organization_data.organization_id, interactive_id.interactive_id)
+
     if info is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Interactive not found or interactive belongs to other organization.")
 
     return info
 
@@ -241,13 +266,25 @@ async def patch_interactive(
     except Exception as e:
         return {"error": str(e)}
 
-    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id)
-    if user_id_role is None:
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id)
+    if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_id_role.role != UserRoleEnum.leader:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can patch interactives")
 
-    user_id = user_id_role.user_id
+    organization_participant_id = await Repository_Organization.get_organization_participant_id_by_user_id(user_id)
+    if organization_participant_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
+
+    conducted = await Repository.get_interactive_conducted(interactive_id=interactive_id,
+                                                           organization_participant_id=organization_participant_id)
+
+    if conducted is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
+
+    if conducted:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
+
+    if interactive_id in ws_manager.interactive_sessions:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
 
     count_images = 0
 
@@ -332,7 +369,7 @@ async def patch_interactive(
             ext = mime_to_ext.get(content_type, "bin")
 
             # Генерируем уникальное имя файла
-            unique_filename = await Repository.generate_unique_filename(ext=ext,bucket_name="images")
+            unique_filename = await Repository.generate_unique_filename(ext=ext, bucket_name="images")
             filename = image.filename
 
             data = MinioData(file=await image.read(), filename=filename, unique_filename=unique_filename,
@@ -351,21 +388,9 @@ async def patch_interactive(
             )
             images_data_second.append(image_data_second)
 
-    conducted = await Repository.get_interactive_conducted(interactive_id=interactive_id, user_id=user_id)
-
-    if conducted is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
-
-    if conducted:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
-
-    if interactive_id in ws_manager.interactive_sessions:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive started")
-
     new_interactive_id = await Repository.update_interactive(interactive_id=interactive_id,
                                                              data=interactive,
-                                                             images=images_data_second
-                                                             )
+                                                             images=images_data_second)
     return new_interactive_id
 
 
@@ -374,25 +399,34 @@ async def delete_interactive(
         interactive_id: Annotated[InteractiveId, Depends()],
         telegram_id: Annotated[TelegramId, Depends()],
 ) -> InteractiveId:
-    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
-    if user_id_role is None:
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id.telegram_id)
+    if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_id_role.role != UserRoleEnum.leader:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can patch interactives")
 
-    user_id = user_id_role.user_id
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_and_role_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
-    conducted = await Repository.get_interactive_conducted(interactive_id.interactive_id, user_id=user_id)
-
-    if conducted is None:
+    interactive_info = await Repository.get_interactive_info(interactive_id.interactive_id)
+    if interactive_info is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
 
-    if conducted:
+    if interactive_info.created_by_id != organization_data.organization_participant_id:
+        if organization_data.role == UserRoleEnum.leader:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Leader cannot delete interactive other people")
+        else:
+            data_creator = await Repository_Organization.get_name_role_organization_id_by_organization_participant_id(
+                interactive_info.created_by_id)
+            if data_creator.organization_id != organization_data.organization_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="You cannot delete interactive other organization")
+    if interactive_info.conducted:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Interactive already end")
 
-    if interactive_id.interactive_id in ws_manager.interactive_sessions and conducted == False:
+    if interactive_id.interactive_id in ws_manager.interactive_sessions:
         await ws_manager.disconnect_delete(interactive_id.interactive_id)
-
     else:
         await Repository.remove_participant_from_interactive(interactive_id=interactive_id.interactive_id)
 
@@ -411,18 +445,30 @@ async def get_interactive(
         interactive_id: Annotated[InteractiveId, Depends()],
         telegram_id: Annotated[TelegramId, Depends()],
 ) -> StageEnd:
-    user_id_role = await Repository.get_user_id_and_role_by_telegram_id(telegram_id.telegram_id)
-    if user_id_role is None:
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id.telegram_id)
+    if user_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_id_role.role != UserRoleEnum.leader:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only leaders can get end info interactive")
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
-    user_id = user_id_role.user_id
+    interactive_created_by_id = await Repository.get_interactive_created_by_id(interactive_id.interactive_id)
+    if interactive_created_by_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interactive not found")
 
-    title = await Repository.get_interactive_title(interactive_id=interactive_id.interactive_id, user_id=user_id)
+    organization_id_who_created = await Repository_Organization.get_organization_id_by_organization_participant_id(interactive_created_by_id)
+
+    if organization_id_who_created != organization_data.organization_id:
+        print(organization_id_who_created)
+        print(organization_data.organization_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot get interactive other organization")
+
+
+    title = await Repository.get_interactive_title(interactive_id=interactive_id.interactive_id)
     if title is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Interactive not found or interactive not conducted")
+                            detail="Interactive not conducted")
 
     participants_total = await Repository_Websocket.get_participant_count(interactive_id.interactive_id)
 

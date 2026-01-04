@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
-from users.schemas import UserRoleEnum
 from fastapi import UploadFile
-
+from pydantic import BaseModel, Field
 import enum
+
+from models import UserRoleEnum
 
 class MinioData(BaseModel):
     file: bytes
@@ -31,11 +31,6 @@ class GetDataInteractive(BaseModel):
     from_number: int
     to_number: int
 
-class UserIdAndRole(BaseModel):
-    user_id: int
-    role: UserRoleEnum
-
-
 class Answer(BaseModel):
     text: str
     is_correct: bool
@@ -55,7 +50,6 @@ class Interactive(BaseModel):
     description: str
     target_audience: str | None = None
     location: str | None = None
-    responsible_full_name: str | None = None
     answer_duration: int
     discussion_duration: int
     countdown_duration: int
@@ -68,9 +62,8 @@ class Interactive(BaseModel):
                 "description": "Интерактивная викторина о языке Python",
                 "target_audience": "Студенты",
                 "location": "Онлайн",
-                "responsible_full_name": "Иван Иванов",
-                "answer_duration": 30,
-                "discussion_duration": 15,
+                "answer_duration": 5,
+                "discussion_duration": 5,
                 "countdown_duration": 5,
                 "questions": [
                     {
@@ -78,7 +71,7 @@ class Interactive(BaseModel):
                         "position": 1,
                         "type": "one",
                         "image": "",
-                        "score": 10,
+                        "score": 1,
                         "answers": [
                             {"text": "Возвращает длину объекта", "is_correct": True},
                             {"text": "Создает новый список", "is_correct": False}
@@ -87,10 +80,6 @@ class Interactive(BaseModel):
                 ]
             }
         }
-
-class ReceiveInteractive(BaseModel):
-    telegram_id: int
-    interactive: Interactive
 
 
 class InteractiveId(BaseModel):
@@ -106,13 +95,6 @@ class InteractiveCreate(Interactive):
     created_by_id: int
     conducted: bool = False
 
-
-class QuestionCreate(BaseModel):
-    text: str
-    position: int
-    interactive_id: int
-
-
 class InteractiveList(BaseModel):
     title: str
     target_audience: str | None = None
@@ -120,6 +102,8 @@ class InteractiveList(BaseModel):
     is_conducted: bool
     id: int
     date_completed: str | None = None
+    username: str
+    is_you: bool
 
 
 class MyInteractives(BaseModel):

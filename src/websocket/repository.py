@@ -4,17 +4,21 @@ from models import *
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, QuestionType, \
     Percentage, Winner, AnswerGet, WinnerDiscussion, PercentageTypeText
 from collections import Counter
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 class Repository:
     @classmethod
-    async def check_interactive_creates(cls, interactive_id: int, user_id: int) -> bool:
+    async def check_interactive_creates(cls, interactive_id: int, organization_participant_id: int) -> bool:
         async with new_session() as session:
             result = await session.execute(
                 select(
                     exists().where(
                         Interactive.id == interactive_id,
-                        Interactive.created_by_id == user_id,
+                        Interactive.created_by_id == organization_participant_id,
                     )
                 )
             )
@@ -31,15 +35,6 @@ class Repository:
                 )
             )
             return result.scalar()
-
-    @classmethod
-    async def get_user_id(cls, telegram_id: int) -> int | None:
-        async with new_session() as session:
-            result = await session.execute(
-                select(User.id).where(User.telegram_id == telegram_id)
-            )
-            user_id = result.scalar_one_or_none()
-            return user_id
 
     @classmethod
     async def get_interactive_info(cls, interactive_id: int) -> InteractiveInfo:
@@ -78,6 +73,7 @@ class Repository:
             )
 
             questions_with_images = result.all()
+            url = os.getenv("URL")
             return [
                 QuestionSchema(
                     id=q.id,
@@ -85,7 +81,7 @@ class Repository:
                     position=q.position,
                     question_weight=q.score,
                     type=q.type,
-                    image=f"https://carclicker.ru/{img.bucket_name}/{img.unique_filename}" if img else ""
+                    image=f"{url}{img.bucket_name}/{img.unique_filename}" if img else ""
                 )
                 for q, img in questions_with_images
             ]
@@ -195,6 +191,7 @@ class Repository:
 
             # Подсчёт выборов
             total = len(filtered_user_answers)
+            # поменять подсчёт тотал, не от числа ответевших а от числа участников
             answer_counts = {a.id: 0 for a in answers}
 
             for ua in filtered_user_answers:
@@ -229,6 +226,7 @@ class Repository:
 
             text_user_answers = [ua for ua in user_answers if ua.answer_type == "text"]
             total = len(text_user_answers)
+            # поменять число тотал на кол-во участников
 
             # читаем совпадения по matched_answer_id
             answer_counts = {a.id: 0 for a in answers}

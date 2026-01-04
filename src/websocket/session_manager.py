@@ -29,11 +29,11 @@ class SessionManager:
         #                         if conn.user_id == user_id]
 
         # await websocket.accept()
-        if role == UserRoleEnum.leader:
+        if role != UserRoleEnum.participant:
             await websocket.accept()
             target_conn = next(
                 (conn for conn in self.active_connections.get(interactive_id, []) if
-                 conn.role == UserRoleEnum.leader and conn.user_id == user_id),
+                 conn.role == role and conn.user_id == user_id),
                 None
             )
             if target_conn:
@@ -45,7 +45,7 @@ class SessionManager:
         else:
             target_conn = next(
                 (conn for conn in self.active_connections.get(interactive_id, []) if
-                 conn.role == UserRoleEnum.participant and conn.user_id == user_id),
+                 conn.role == role and conn.user_id == user_id),
                 None
             )
             if target_conn:
@@ -64,7 +64,7 @@ class SessionManager:
     async def disconnect(self, interactive_id: int, user_id: int, role: UserRoleEnum):
         """Отключение вебсокета от интерактива"""
         if interactive_id in self.active_connections:
-            if role == UserRoleEnum.leader and interactive_id in self.interactive_sessions and await \
+            if role != UserRoleEnum.participant and interactive_id in self.interactive_sessions and await \
                     self.interactive_sessions[interactive_id].get_stage() == Stage.WAITING:
                 await self.interactive_sessions[interactive_id].stop()
             else:
@@ -95,7 +95,7 @@ class SessionManager:
                                                                      percentages=persentages)
                     message.data_answers = data_answers
                     for data in self.active_connections[interactive_id]:
-                        if data.role == UserRoleEnum.leader:
+                        if data.role != UserRoleEnum.participant:
                             try:
                                 await data.websocket.send_json(message.model_dump())
                             except:
@@ -114,7 +114,7 @@ class SessionManager:
                                                                       percentages=persentages)
                     message.data_answers = data_answers
                     for data in self.active_connections[interactive_id]:
-                        if data.role == UserRoleEnum.leader:
+                        if data.role != UserRoleEnum.participant:
                             try:
                                 await data.websocket.send_json(message.model_dump())
                             except:
@@ -129,7 +129,7 @@ class SessionManager:
                 elif question_type == QuestionType.text:
                     persentages_text = await Repository.get_percentages_for_text(message.data.question.id)
                     for data in self.active_connections[interactive_id]:
-                        if data.role == UserRoleEnum.leader:
+                        if data.role != UserRoleEnum.participant:
                             try:
                                 list_answer_data = [
                                     CorrectAnswerStageDiscussionTypeTextLeader(text=i.text, percentage=i.percentage) for
@@ -185,7 +185,7 @@ class SessionManager:
                     )
                 message.data.winners = winners
                 for data in self.active_connections[interactive_id]:
-                    if data.role == UserRoleEnum.leader:
+                    if data.role != UserRoleEnum.participant:
                         try:
                             await data.websocket.send_json(message.model_dump())
                         except:

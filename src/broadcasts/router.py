@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, UploadFile, Form, File
+from fastapi import APIRouter, HTTPException, UploadFile, Form, File, status
 from dotenv import load_dotenv
 import os
 
-from broadcasts.schemas import SendGet, SendGet2, BroadcastRequest, InteractiveId
 from broadcasts.repository import Repository
 from broadcasts.redis_queue import message_queue
 
 from interactivities.repository import Repository as Repository_interactive
+from organizations.repository import Repository as Repository_Organization
 import minios3.services as services
+
 
 load_dotenv()
 
@@ -26,9 +27,13 @@ async def get_send(
         text: str = Form(None, description="Сообщение от 0 до 4096 знаков"),
         file: UploadFile = File(default=None, description="Файл (может отсутствовать), размер до 50МБ")
 ):
-    user_id = await Repository.get_user_id(telegram_id)
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(telegram_id)
     if user_id is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
     if text is not None:
         if len(text) > 4096:
@@ -39,7 +44,7 @@ async def get_send(
 
     data_ids = set()
     for iid in interactive_id:
-        ids = await Repository.get_telegram_id_for_interactive_id(iid, user_id)
+        ids = await Repository.get_telegram_id_for_interactive_id(iid, organization_data.organization_id)
         data_ids.update(ids)
 
     data_ids = list(data_ids)
@@ -71,8 +76,11 @@ async def get_send(
 
         await Repository.save_image(saved_file)
 
+
+        url = os.getenv("URL")
+
         file_data = {
-            "url": f"https://carclicker.ru/{bucket}/{unique}",
+            "url": f"{url}{bucket}/{unique}",
             "filename": file.filename,
             "unique_filename": unique,
             "bucket_name": bucket,

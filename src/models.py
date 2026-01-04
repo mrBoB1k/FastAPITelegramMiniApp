@@ -7,9 +7,12 @@ import enum
 from sqlalchemy import Enum
 
 
-class UserRole(str, enum.Enum):
+class UserRoleEnum(str, enum.Enum):
     leader = "leader"
     participant = "participant"
+    admin = "admin"
+    organizer = "organizer"
+    remote = "remote"
 
 
 Base = declarative_base()
@@ -24,8 +27,26 @@ class User(AsyncAttrs, Base):
     first_name = Column(Text, nullable=False)
     last_name = Column(Text, nullable=True)
     phone_number = Column(Text, nullable=True)
-    role = Column(Enum(UserRole), nullable=False)
+    # role = Column(Enum(UserRole), nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+
+
+class Organization(AsyncAttrs, Base):
+    __tablename__ = 'organizations'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+
+
+class OrganizationParticipant(AsyncAttrs, Base):
+    __tablename__ = 'organization_participants'
+
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(Text, nullable=False)
+    role = Column(Enum(UserRoleEnum), nullable=False)
 
 
 class Interactive(AsyncAttrs, Base):
@@ -37,8 +58,8 @@ class Interactive(AsyncAttrs, Base):
     description = Column(Text, nullable=False)
     target_audience = Column(Text, nullable=True)
     location = Column(Text, nullable=True)
-    responsible_full_name = Column(Text, nullable=True)
-    created_by_id = Column(Integer, ForeignKey("users.id"))
+    # responsible_full_name = Column(Text, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("organization_participants.id"))
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     answer_duration = Column(Integer, nullable=False)
     discussion_duration = Column(Integer, nullable=False)
@@ -58,6 +79,7 @@ class Question(AsyncAttrs, Base):
     type = Column(Text, nullable=False)
     image_id = Column(Integer, ForeignKey("images.id"), nullable=True)
 
+
 class Image(AsyncAttrs, Base):
     __tablename__ = 'images'
 
@@ -67,6 +89,7 @@ class Image(AsyncAttrs, Base):
     content_type = Column(Text, nullable=False)
     size = Column(BigInteger, nullable=False)
     bucket_name = Column(Text, nullable=False)
+
 
 class Answer(AsyncAttrs, Base):
     __tablename__ = 'answers'
@@ -131,19 +154,9 @@ class UserAnswer(AsyncAttrs, Base):
             "answer_ids": answer_ids
         }
 
-    def set_text_answer(self, answer_text, matched_answer_id = None):
+    def set_text_answer(self, answer_text, matched_answer_id=None):
         self.answer_data = {
             "type": "text",
             "answer_text": answer_text,
             "matched_answer_id": matched_answer_id
         }
-
-class RoleChange(AsyncAttrs, Base):
-    __tablename__ = 'role_changes'
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    changed_by_id = Column(Integer, ForeignKey("users.id"))
-    old_role = Column(Text, nullable=False)
-    new_role = Column(Text, nullable=False)
-    changed_at = Column(TIMESTAMP, nullable=False, server_default=func.now())

@@ -1,35 +1,36 @@
+from fastapi import HTTPException
 from sqlalchemy import select
+
 from database import new_session
 from models import *
-from fastapi import HTTPException
 
 from minios3.schemas import ImageModel
 
+
 class Repository:
     @classmethod
-    async def get_user_id(cls, telegram_id: int) -> int | None:
+    async def get_telegram_id_for_interactive_id(cls, interactive_id: int, organization_id: int) -> list[int]:
         async with new_session() as session:
             result = await session.execute(
-                select(User.id).where(User.telegram_id == telegram_id, User.role == UserRole.leader)
-            )
-            user_id = result.scalar_one_or_none()
-            return user_id
-
-    @classmethod
-    async def get_telegram_id_for_interactive_id(cls, interactive_id: int, user_id: int) -> list[int]:
-        async with new_session() as session:
-            result = await session.execute(
-                select(Interactive.id)
-                .where(Interactive.id==interactive_id, Interactive.created_by_id==user_id)
+                select(Interactive)
+                .where(Interactive.id == interactive_id)
             )
 
-            interactive_id = result.scalar_one_or_none()
-            if not interactive_id:
-                raise HTTPException(status_code=404, detail=f"Интерактив с ID {interactive_id} не найден")
+            interactive = result.scalar_one_or_none()
+            if interactive is None:
+                raise HTTPException(status_code=404, detail=f"Интерактив с ID {interactive.id} не найден")
+
+            organization = await session.execute(
+                select(OrganizationParticipant.organization_id)
+                .where(OrganizationParticipant.id == interactive.created_by_id)
+            )
+            organization = organization.scalar_one_or_none()
+            if organization_id != organization:
+                raise HTTPException(status_code=404, detail=f"Интерактив принадлежит другой организаций")
 
             participants = await session.execute(
                 select(QuizParticipant)
-                .where(QuizParticipant.interactive_id == interactive_id)
+                .where(QuizParticipant.interactive_id == interactive.id)
             )
             participants = participants.scalars().all()
 

@@ -1,17 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from typing import Annotated
-
-from interactivities.schemas import InteractiveType
-from interactivities.repository import Repository as Repository_interactive
-
-from broadcasts.repository import Repository as Repository_broadcasts
-
-from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum, ReturnUrl
-from reports.repository import Repository
-
-import minios3.services as services
-
 import io
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -21,6 +10,19 @@ import transliterate
 import re
 from datetime import time
 
+from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum, ReturnUrl
+from reports.repository import Repository
+
+from interactivities.schemas import InteractiveType
+from interactivities.repository import Repository as Repository_interactive
+from broadcasts.repository import Repository as Repository_broadcasts
+from organizations.repository import Repository as Repository_Organization
+import minios3.services as services
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 router = APIRouter(
     prefix="/api/reports",
@@ -28,27 +30,21 @@ router = APIRouter(
 )
 
 
-#
-# @router.get("/preview")
-# async def get_preview(telegram_id: Annotated[TelegramId, Depends()]) -> InteractiveList:
-#     user_id = await Repository.get_user_id(telegram_id.telegram_id)
-#     if user_id is None:
-#         raise HTTPException(status_code=404, detail="User not found")
-#     data = await Repository.get_reports_preview(user_id)
-#     return data
-
-
 @router.post("/export")
 async def get_export(input_data: ExportGet) -> ReturnUrl:
-    user_id = await Repository.get_user_id(input_data.telegram_id)
+    user_id = await Repository_Organization.get_user_id_by_telegram_id(input_data.telegram_id)
     if user_id is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
+        user_id)
+    if organization_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
 
     for interactive_id in input_data.interactive_id:
-        flag = await Repository.check_user_conducted_interactive(user_id=user_id, interactive_id=interactive_id.id)
+        flag = await Repository.check_user_conducted_interactive(organization_id=organization_data.organization_id, interactive_id=interactive_id.id)
         if not flag:
             raise HTTPException(status_code=404,
-                                detail=f"interactive id {interactive_id.id} not found for user {input_data.telegram_id}, or not conducted")
+                                detail=f"interactive id {interactive_id.id} not found on organization, or not conducted")
 
     bucket = "reports"
 
@@ -97,18 +93,17 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                 translit_title = re.sub(r'[^\w_]', '', translit_title)
                 filename = f"PRC_{translit_title}_{data_title_date.date_completed}.xlsx"
 
-
         file_bytes = save_virtual_workbook(wb)
 
         unique = await Repository_interactive.generate_unique_filename(ext="xlsx", bucket_name=bucket)
 
         saved_file = await services.save_image_to_minio(file=file_bytes, filename=filename, unique_filename=unique,
-                                                  content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                                  size=len(file_bytes), bucket_name=bucket)
+                                                        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                        size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-
-        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}", name=filename)
+        url = os.getenv("URL")
+        return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
     elif input_data.report_type == ExportEnum.forLeader.value:
         wb = Workbook()
@@ -563,8 +558,8 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                                                         size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-
-        return ReturnUrl(url=f"https://carclicker.ru/{bucket}/{saved_file.unique_filename}", name=filename)
+        url = os.getenv("URL")
+        return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
     else:
         raise HTTPException(status_code=400, detail="Invalid export type")

@@ -1,36 +1,28 @@
 from typing import List
-
 from sqlalchemy import select, delete, case
-from database import new_session
-from models import *
-
 from datetime import datetime
 import pytz
-
-from interactivities.schemas import UserIdAndRole, InteractiveCreate, InteractiveId, \
-    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractives, FilterEnum, \
-    InteractiveList
-from minios3.schemas import ImageModel
 import random
 import string
 import uuid
 from urllib.parse import urlparse
+
+from database import new_session
+from models import *
+
+from interactivities.schemas import InteractiveCreate, InteractiveId, \
+    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractives, FilterEnum, \
+    InteractiveList
+
+from minios3.schemas import ImageModel
 import minios3.services as services
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 class Repository:
-    @classmethod
-    async def get_user_id_and_role_by_telegram_id(cls, telegram_id: int) -> UserIdAndRole | None:
-        async with new_session() as session:
-            result = await session.execute(
-                select(User.id, User.role).where(User.telegram_id == telegram_id)
-            )
-            row = result.one_or_none()
-            if row is None:
-                return None
-            user_id, role = row
-            return UserIdAndRole(user_id=user_id, role=role)
-
     @classmethod
     async def check_code_exists(cls, code: str) -> int:
         async with new_session() as session:
@@ -122,16 +114,8 @@ class Repository:
                 return unique_filename
 
     @classmethod
-    async def get_user_id(cls, telegram_id: int) -> int | None:
-        async with new_session() as session:
-            result = await session.execute(
-                select(User.id).where(User.telegram_id == telegram_id)
-            )
-            user_id = result.scalar_one_or_none()
-            return user_id
-
-    @classmethod
-    async def get_interactives(cls, user_id: int, filter: FilterEnum, from_number: int,
+    async def get_interactives(cls, organization_id: int, organization_participant_id: int, filter: FilterEnum,
+                               from_number: int,
                                to_number: int) -> MyInteractives:
         async with new_session() as session:
             # Подзапрос для подсчета количества участников
@@ -150,6 +134,13 @@ class Repository:
                 else_=Interactive.created_at
             ).label("display_date")
 
+            # Сначала находим всех участников организации
+            org_participants_subq = (
+                select(OrganizationParticipant.id)
+                .where(OrganizationParticipant.organization_id == organization_id)
+                .subquery()
+            )
+
             # Базовый запрос с общими полями
             base_query = (
                 select(
@@ -160,14 +151,23 @@ class Repository:
                     Interactive.created_at,
                     Interactive.conducted,
                     Interactive.date_completed,
-                    func.coalesce(participant_count_subq.c.participant_count, 0).label('participant_count')
+                    func.coalesce(participant_count_subq.c.participant_count, 0).label('participant_count'),
+                OrganizationParticipant.id.label('org_participant_id'),
+                OrganizationParticipant.name.label('org_participant_name')
                 )
                 .join(
                     participant_count_subq,
                     Interactive.id == participant_count_subq.c.interactive_id,
                     isouter=True
                 )
-                .where(Interactive.created_by_id == user_id)
+                .join(
+                    OrganizationParticipant,
+                    Interactive.created_by_id == OrganizationParticipant.id
+                )
+                .where(
+                    OrganizationParticipant.organization_id == organization_id,
+                    OrganizationParticipant.id.in_(select(org_participants_subq))
+                )
             )
 
             # Применяем фильтры
@@ -195,9 +195,6 @@ class Repository:
             # Преобразуем данные в схему
             interactives_list = []
             for interactive in interactives_data:
-                # Используем уже вычисленное поле display_date
-                # date_str = interactive.display_date.strftime("%d.%m.%y %H:%M") if interactive.display_date else None
-
                 if interactive.display_date.tzinfo is None:
                     # Сначала добавляем UTC, затем конвертируем
                     utc_time = pytz.UTC.localize(interactive.display_date)
@@ -214,7 +211,9 @@ class Repository:
                     participant_count=interactive.participant_count,
                     is_conducted=interactive.conducted,
                     id=interactive.id,
-                    date_completed=date_str
+                    date_completed=date_str,
+                    username=interactive.org_participant_name,
+                    is_you=interactive.org_participant_id == organization_participant_id,
                 ))
 
             # Определяем, достигнут ли конец списка
@@ -226,17 +225,29 @@ class Repository:
             )
 
     @classmethod
-    async def get_all_interactive_info(cls, user_id: int, interactive_id: int) -> InteractiveFull | None:
+    async def get_all_interactive_info(cls, organization_id: int, interactive_id: int) -> InteractiveFull | None:
         async with new_session() as session:
             interactive = await session.execute(
                 select(Interactive)
                 .where(
-                    Interactive.id == interactive_id,
-                    Interactive.created_by_id == user_id
+                    Interactive.id == interactive_id
                 )
             )
             interactive = interactive.scalar_one_or_none()
             if interactive is None:
+                return None
+
+            organization = await session.execute(
+                select(OrganizationParticipant)
+                .where(
+                    OrganizationParticipant.id == interactive.created_by_id
+                )
+            )
+            organization = organization.scalar_one_or_none()
+            if organization is None:
+                return None
+
+            if organization.organization_id != organization_id:
                 return None
 
             questions_result = await session.execute(
@@ -269,7 +280,8 @@ class Repository:
                     )
                     image_data = image_result.scalars().first()
                     if image_data is not None:
-                        image = f"https://carclicker.ru/{image_data.bucket_name}/{image_data.unique_filename}"
+                        url = os.getenv("URL")
+                        image = f"{url}{image_data.bucket_name}/{image_data.unique_filename}"
 
                 questions_data.append(
                     QuestionFull(
@@ -287,7 +299,6 @@ class Repository:
                 description=interactive.description,
                 target_audience=interactive.target_audience,
                 location=interactive.location,
-                responsible_full_name=interactive.responsible_full_name,
                 answer_duration=interactive.answer_duration,
                 discussion_duration=interactive.discussion_duration,
                 countdown_duration=interactive.countdown_duration,
@@ -295,11 +306,11 @@ class Repository:
             )
 
     @classmethod
-    async def get_interactive_conducted(cls, interactive_id: int, user_id: int) -> bool:
+    async def get_interactive_conducted(cls, interactive_id: int, organization_participant_id: int) -> bool:
         async with new_session() as session:
             result = await session.execute(
                 select(Interactive.conducted).where(Interactive.id == interactive_id,
-                                                    Interactive.created_by_id == user_id)
+                                                    Interactive.created_by_id == organization_participant_id)
             )
             conducted = result.scalar_one_or_none()
 
@@ -529,15 +540,36 @@ class Repository:
                 return
 
     @classmethod
-    async def get_interactive_title(cls, interactive_id: int, user_id: int) -> str | None:
+    async def get_interactive_title(cls, interactive_id: int) -> str | None:
         async with new_session() as session:
             result = await session.execute(
                 select(Interactive.title)
                 .where(Interactive.id == interactive_id,
-                       Interactive.created_by_id == user_id,
                        Interactive.conducted == True)
             )
             row = result.one_or_none()
             if row is None:
                 return None
             return row.title
+
+    @classmethod
+    async def get_interactive_created_by_id(cls, interactive_id: int) -> int | None:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Interactive.created_by_id)
+                .where(Interactive.id == interactive_id)
+            )
+            row = result.one_or_none()
+            if row is None:
+                return None
+            return row.created_by_id
+
+    @classmethod
+    async def get_interactive_info(cls, interactive_id: int) -> Interactive | None:
+        async with new_session() as session:
+            result = await session.execute(
+                select(Interactive).where(Interactive.id == interactive_id)
+            )
+            interactive = result.scalar_one_or_none()
+
+            return interactive

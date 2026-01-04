@@ -32,7 +32,12 @@ class Repository:
             # 1. Получаем базовую информацию об интерактиве
             interactive = await session.get(Interactive, interactive_id)
             if not interactive:
-                raise HTTPException(status_code=404, detail="Интерактив с ID {interactive_id} не найден")
+                raise HTTPException(status_code=404, detail=f"Интерактив с ID {interactive_id} не найден")
+
+            responsible_full_name = await session.get(OrganizationParticipant, interactive.created_by_id)
+            if not responsible_full_name:
+                raise HTTPException(status_code=404, detail="Не найден создатель интерактива")
+            responsible_full_name = responsible_full_name.name
 
             # 2. Получаем всех участников интерактива
             participants = await session.execute(
@@ -88,7 +93,7 @@ class Repository:
                     question_count=await cls._get_question_count(session, interactive_id),
                     target_audience=interactive.target_audience,
                     location=interactive.location,
-                    responsible_full_name=interactive.responsible_full_name,
+                    responsible_full_name=responsible_full_name,
                     telegram_id=user.telegram_id,
                     username=user.username,
                     full_name=f"{user.first_name} {user.last_name}" if user.last_name else user.first_name,
@@ -141,6 +146,11 @@ class Repository:
             if not interactive:
                 raise ValueError(f"Интерактив с ID {interactive_id} не найден")
 
+            responsible_full_name = await session.get(OrganizationParticipant, interactive.created_by_id)
+            if not responsible_full_name:
+                raise HTTPException(status_code=404, detail="Не найден создатель интерактива")
+            responsible_full_name = responsible_full_name.name
+
             # 2. Получаем всех участников
             participants = await session.execute(
                 select(QuizParticipant)
@@ -192,7 +202,7 @@ class Repository:
                 participant_count=len(participants),
                 target_audience=interactive.target_audience,
                 location=interactive.location,
-                responsible_full_name=interactive.responsible_full_name,
+                responsible_full_name=responsible_full_name,
                 question=questions_data
             )
 
@@ -290,18 +300,27 @@ class Repository:
 
 
     @classmethod
-    async def check_user_conducted_interactive(cls, user_id: int, interactive_id: int) -> bool:
+    async def check_user_conducted_interactive(cls, organization_id: int, interactive_id: int) -> bool:
         async with new_session() as session:
             query = (
-                select(Interactive.id)
+                select(Interactive)
                 .where(
                     Interactive.id == interactive_id,
-                    Interactive.created_by_id == user_id,
                     Interactive.conducted == True
                 )
             )
 
             result = await session.execute(query)
             interactive = result.scalar_one_or_none()
+            if interactive is None:
+                return False
 
-            return interactive is not None
+            organization = await session.execute(
+                select(OrganizationParticipant.organization_id)
+                .where(OrganizationParticipant.id == interactive.created_by_id)
+            )
+            organization = organization.scalar_one_or_none()
+            if organization is None:
+                return False
+
+            return True

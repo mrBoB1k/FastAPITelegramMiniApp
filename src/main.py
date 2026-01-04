@@ -8,6 +8,7 @@ from websocket.router import router as websocket_router
 from interactivities.router import router as interactivity_router
 from reports.router import router as report_router
 from broadcasts.router import router as broadcast_router
+from organizations.router import router as organization_router
 
 from dotenv import load_dotenv
 import os
@@ -47,3 +48,4 @@ app.include_router(interactivity_router)
 app.include_router(websocket_router)
 app.include_router(report_router)
 app.include_router(broadcast_router)
+app.include_router(organization_router)
