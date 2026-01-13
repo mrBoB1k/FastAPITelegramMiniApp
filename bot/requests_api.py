@@ -39,7 +39,7 @@ async def get_role(message):
             return response_data.get("role")
 
 async def add_organization_participants(message, telegram_id: int, role: str):
-    url = f"{_URL}/participants2"
+    url = f"{_URL}/api/organization/participants2"
     params = {
         "x_key": os.getenv("SECRET_KEY"),
         "telegram_id": telegram_id,
