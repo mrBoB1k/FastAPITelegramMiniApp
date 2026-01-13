@@ -5,8 +5,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 def get_host_keyboard():
     kb = [
         [types.KeyboardButton(text="Управление интерактивами")],
-        [types.KeyboardButton(text="Ввести код подключения")],
-        [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
+        [types.KeyboardButton(text="Ввести код подключения")]
+        # [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
         # [types.KeyboardButton(text="Test")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
@@ -18,8 +18,8 @@ def get_host_keyboard():
 
 def get_member_keyboard():
     kb = [
-        [types.KeyboardButton(text="Ввести код подключения")],
-        [types.KeyboardButton(text="Получить роль ведущего для комиссий урфу")]
+        [types.KeyboardButton(text="Ввести код подключения")]
+        # [types.KeyboardButton(text="Получить роль ведущего для комиссий урфу")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=kb,
