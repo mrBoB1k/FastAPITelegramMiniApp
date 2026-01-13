@@ -42,14 +42,14 @@ async def start_handler(message: Message):
         )
         keyboard = get_host_keyboard()
 
-    if role == "admin":
+    elif role == "admin":
         greet_text = (
             f"Приятно познакомиться, {first_name}! Вам назначена роль админа. "
             "В этом сервисе вы можете создавать, управлять и проводить интерактивы."
         )
         keyboard = get_host_keyboard()
 
-    if role == "organizer":
+    elif role == "organizer":
         greet_text = (
             f"Приятно познакомиться, {first_name}! Вам назначена роль организатор. "
             "В этом сервисе вы можете создавать, управлять и проводить интерактивы."
