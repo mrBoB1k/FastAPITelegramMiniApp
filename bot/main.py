@@ -147,10 +147,10 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
                 keyboard = get_host_keyboard()
                 greeting = f"Добро пожаловать, тебя добавили в организацию с ролью ведущий"
             elif role == "admin":
-                keyboard = get_member_keyboard()
+                keyboard = get_host_keyboard()
                 greeting = f"Добро пожаловать, тебя добавили в организацию с ролью админ"
             elif role == "organizer":
-                keyboard = get_member_keyboard()
+                keyboard = get_host_keyboard()
                 greeting = f"Добро пожаловать, тебя добавили в организацию с ролью организатор"
             else:
                 greeting = "Ваша роль не распознана. Пожалуйста, свяжитесь с администратором."
@@ -167,7 +167,7 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
     is_valid_role = True
     keyboard = None
 
-    if role == "leader":
+    if role == "leader" or role == "admin" or role == "organizer":
         keyboard = get_host_keyboard()
         greeting = f"Получен код интерактива: {param}"
     elif role == "participant":
