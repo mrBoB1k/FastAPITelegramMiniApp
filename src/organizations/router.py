@@ -231,6 +231,42 @@ async def add_organization_participants(
     return NameInOrganization(name=data_add.name, username=user_id_add.username,
                               organization_name=data_organization.organization_name, role=data_add.role)
 
+@router.post("/participants2")
+async def add_organization_participants2(
+        telegram_id: int,
+        participant_telegram_id: int,
+        role: AddOrganizationParticipantsEnum
+) -> NameInOrganization:
+    user_id = await Repository.get_user_id_by_telegram_id(telegram_id)
+    if user_id is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    data_organization_participant = await Repository.get_name_role_organization_id(user_id)
+    if data_organization_participant is None:
+        raise HTTPException(status_code=404, detail="User not found on organization")
+
+    if data_organization_participant.role == UserRoleEnum.leader:
+        raise HTTPException(status_code=404, detail="Only admin and organizer can add participants in organization")
+
+    data_organization = await Repository.get_organization_info(data_organization_participant.organization_id)
+    if data_organization is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    user_id_add = await Repository.get_user_id_and_username_by_telegram_id(participant_telegram_id)
+    if user_id_add is None:
+        raise HTTPException(status_code=409, detail="User to add not found")
+    name = user_id_add.username if len(user_id_add.username) != 0 else "Аноним"
+
+    data_organization_participant_add = await Repository.get_name_role_organization_id(user_id_add.user_id)
+    if data_organization_participant_add is not None:
+        raise HTTPException(status_code=404, detail="You cannot add a user who is a member of another organization.")
+
+    data_add = await Repository.add_organization_participant(
+        organization_id=data_organization_participant.organization_id, user_id=user_id_add.user_id, name=name,
+        role=UserRoleEnum(role.value))
+
+    return NameInOrganization(name=data_add.name, username=user_id_add.username,
+                              organization_name=data_organization.organization_name, role=data_add.role)
 
 @router.post("/create")
 async def create_organization(

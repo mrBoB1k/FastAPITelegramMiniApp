@@ -6,6 +6,7 @@ from models import UserRoleEnum
 from users.repository import Repository
 from users.schemas import UserRegister, UserRole
 
+from organizations.repository import Repository as Repository_organization
 router = APIRouter(
     prefix="/api/users",
     tags=["/api/users"]
@@ -17,7 +18,8 @@ async def register(
 ) -> UserRole:
     user_id = await Repository.get_user_id_by_telegram_id(user.telegram_id)
     if user_id is not None:
-        raise HTTPException(status_code=400, detail="User already registered")
+        role = await Repository_organization.get_role_on_organizations_by_user_id(user_id)
+        return UserRole(role=role.role)
 
     if user.username is None:
         user.username = ""

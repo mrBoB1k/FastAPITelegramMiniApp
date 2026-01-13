@@ -37,11 +37,29 @@ async def get_role(message):
                 pass
 
             return response_data.get("role")
-    # return  "leader"
 
+async def add_organization_participants(message, telegram_id: int, role: str):
+    url = f"{_URL}/participants2"
+    params = {
+        "x_key": os.getenv("SECRET_KEY"),
+        "telegram_id": telegram_id,
+        "participant_telegram_id": message.from_user.id,
+        "role": role,
+    }
 
-# функция проверки существования интерактива по коду (пока заглушка)
+    params = {k: v for k, v in params.items() if v is not None}
 
+    # отключает проверку на подлинность ssl сертификата, иначе у меня на машине выдает ошибку
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, params=params, ssl=ssl_context) as response:
+            try:
+                response_data = await response.json()
+            except aiohttp.ContentTypeError:
+                pass
+
+            return response_data.get("role")
 
 async def check_code(code: str) -> int | None:
     url = f"{_URL}/api/interactivities/join"

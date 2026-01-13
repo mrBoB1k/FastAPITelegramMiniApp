@@ -5,7 +5,7 @@ from aiogram.types import Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-from requests_api import get_role, check_code, change_user_role
+from requests_api import get_role, check_code, change_user_role, add_organization_participants
 from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu, get_link_to_test
 
 from dotenv import load_dotenv
@@ -42,6 +42,20 @@ async def start_handler(message: Message):
         )
         keyboard = get_host_keyboard()
 
+    if role == "admin":
+        greet_text = (
+            f"Приятно познакомиться, {first_name}! Вам назначена роль админа. "
+            "В этом сервисе вы можете создавать, управлять и проводить интерактивы."
+        )
+        keyboard = get_host_keyboard()
+
+    if role == "organizer":
+        greet_text = (
+            f"Приятно познакомиться, {first_name}! Вам назначена роль организатор. "
+            "В этом сервисе вы можете создавать, управлять и проводить интерактивы."
+        )
+        keyboard = get_host_keyboard()
+
     elif role == "participant":
         greet_text = (
             f"{first_name}, добро пожаловать в Clik! Вы подключились как участник — "
@@ -59,7 +73,7 @@ async def start_handler(message: Message):
 @router.message(F.text == "Управление интерактивами")
 async def start_cmd(message: Message):
     role = await get_role(message)
-    if await get_role(message) == "leader":
+    if role == "leader" or role == "admin" or role == "organizer":
         await message.answer("Панель управления интерактивами", reply_markup=get_link_to_main_menu())
 
 # @router.message(F.text == "Test")
@@ -75,23 +89,23 @@ async def start_cmd(message: Message, state: FSMContext):
     await state.update_data(attempts=0)
     await message.answer("Введите код для подключения к интерактиву")
 
-@router.message(F.text == "Получить роль ведущего для комиссий урфу")
-async def get_leader_role(message: Message):
-    role = await get_role(message)
-    success = await change_user_role(message.from_user.id, "leader")
-    if success:
-        await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
-    else:
-        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
-
-@router.message(F.text == "Получить роль участника для комиссий урфу")
-async def get_participant_role(message: Message):
-    role = await get_role(message)
-    success = await change_user_role(message.from_user.id, "participant")
-    if success:
-        await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
-    else:
-        await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
+# @router.message(F.text == "Получить роль ведущего для комиссий урфу")
+# async def get_leader_role(message: Message):
+#     role = await get_role(message)
+#     success = await change_user_role(message.from_user.id, "leader")
+#     if success:
+#         await message.answer("Роль успешно изменена на ведущего!", reply_markup=get_host_keyboard())
+#     else:
+#         await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
+#
+# @router.message(F.text == "Получить роль участника для комиссий урфу")
+# async def get_participant_role(message: Message):
+#     role = await get_role(message)
+#     success = await change_user_role(message.from_user.id, "participant")
+#     if success:
+#         await message.answer("Роль успешно изменена на участника!", reply_markup=get_member_keyboard())
+#     else:
+#         await message.answer("Не удалось изменить роль. Пожалуйста, введите команду /start.")
 
 @router.message(CodeInput.waiting_for_code)
 async def handle_code_input(message: Message, state: FSMContext):
@@ -101,6 +115,7 @@ async def handle_code_input(message: Message, state: FSMContext):
         code = code[7:]
     await process_code(code, message, state)
 
+
 @router.message(CommandStart(deep_link=True))
 async def handle_start_with_param(message: Message, command: CommandObject, state: FSMContext):
     param = command.args
@@ -108,9 +123,6 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
         return
 
     role = await get_role(message)
-    is_valid_role = True
-    keyboard = None
-
 
     # Проверяем состояние
     current_state = await state.get_state()
@@ -119,7 +131,42 @@ async def handle_start_with_param(message: Message, command: CommandObject, stat
         await process_code(param, message, state)
         return
 
-    # Остальная логика для обычного deep link
+    # Проверяем, является ли параметр telegram_id_role (формат: "123456_leader" или "123456_participant")
+    if "_" in param:
+        try:
+            parts = param.split("_")
+            telegram_id = int(parts[0])
+            role_param = parts[1]
+
+            # Здесь просто логируем в консоль
+            print(f"Получен deep link с telegram_id={telegram_id} и role={role_param}")
+            role = await add_organization_participants(message, telegram_id, role_param)
+
+            # Остальная логика для обычного deep link
+            if role == "leader":
+                keyboard = get_host_keyboard()
+                greeting = f"Добро пожаловать, тебя добавили в организацию с ролью ведущий"
+            elif role == "admin":
+                keyboard = get_member_keyboard()
+                greeting = f"Добро пожаловать, тебя добавили в организацию с ролью админ"
+            elif role == "organizer":
+                keyboard = get_member_keyboard()
+                greeting = f"Добро пожаловать, тебя добавили в организацию с ролью организатор"
+            else:
+                greeting = "Ваша роль не распознана. Пожалуйста, свяжитесь с администратором."
+                keyboard = None
+
+            await message.answer(greeting, reply_markup=keyboard)
+            return
+
+        except (ValueError, IndexError):
+            # Если не удалось распарсить как telegram_id_role, продолжаем как обычно
+            pass
+
+    # Обрабатываем как обычный код интерактива (6 символов)
+    is_valid_role = True
+    keyboard = None
+
     if role == "leader":
         keyboard = get_host_keyboard()
         greeting = f"Получен код интерактива: {param}"
