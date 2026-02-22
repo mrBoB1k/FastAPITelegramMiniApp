@@ -114,7 +114,6 @@ services:
       MINIO_SECRET_KEY : ${MINIO_SECRET_KEY}
       REDIS_HOST : ${REDIS_HOST}
       REDIS_PORT : ${REDIS_PORT}
-    command: python -m worker
     depends_on:
       redis:
         condition: service_healthy
