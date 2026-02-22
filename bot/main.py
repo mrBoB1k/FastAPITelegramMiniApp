@@ -5,15 +5,10 @@ from aiogram.types import Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-from requests_api import get_role, check_code, change_user_role, add_organization_participants
-from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu, get_link_to_test
+from requests_api import get_role, check_code, add_organization_participants
+from keyboards import get_host_keyboard, get_member_keyboard, get_link_to_interavctive, get_link_to_main_menu
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from config import BOT_TOKEN
 
 # Проверка обязательных переменных
 if not BOT_TOKEN:

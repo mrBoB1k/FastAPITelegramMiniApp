@@ -1,13 +1,12 @@
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
+from config import URL_FRONT
 
 def get_host_keyboard():
     kb = [
         [types.KeyboardButton(text="Управление интерактивами")],
         [types.KeyboardButton(text="Ввести код подключения")]
-        # [types.KeyboardButton(text="Получить роль участника для комиссий урфу")]
-        # [types.KeyboardButton(text="Test")]
     ]
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=kb,
@@ -33,7 +32,7 @@ def get_link_to_interavctive(interactive_id: int):
         [
             InlineKeyboardButton(
                 text="Нажмите, чтобы подключиться 🌐",
-                web_app=WebAppInfo(url=f"https://voshod07.ru/participant/{interactive_id}")
+                web_app=WebAppInfo(url=f"{URL_FRONT}participant/{interactive_id}")
             )
         ]
     ])
@@ -46,7 +45,7 @@ def get_link_to_main_menu():
         [
             InlineKeyboardButton(
                 text="Нажмите, чтобы войти 🌐",
-                web_app=WebAppInfo(url="https://voshod07.ru/leader/new_interactives")
+                web_app=WebAppInfo(url=F"{URL_FRONT}leader/new_interactives")
             )
         ]
     ])
@@ -58,7 +57,7 @@ def get_link_to_test():
         [
             InlineKeyboardButton(
                 text="Test 🌐",
-                web_app=WebAppInfo(url="https://voshod07.ru/leader/test")
+                web_app=WebAppInfo(url=F"{URL_FRONT}leader/test")
             )
         ]
     ])

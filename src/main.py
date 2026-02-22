@@ -10,15 +10,11 @@ from reports.router import router as report_router
 from broadcasts.router import router as broadcast_router
 from organizations.router import router as organization_router
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-_SECRET_KEY = os.getenv('SECRET_KEY')
+from config import SECRET_KEY
 
 
 async def verify_key(x_key: str):
-    if x_key != _SECRET_KEY:
+    if x_key != SECRET_KEY:
         raise HTTPException(status_code=400, detail="X-Key header invalid")
     return x_key
 

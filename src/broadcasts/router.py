@@ -1,6 +1,4 @@
 from fastapi import APIRouter, HTTPException, UploadFile, Form, File, status
-from dotenv import load_dotenv
-import os
 
 from broadcasts.repository import Repository
 from broadcasts.redis_queue import message_queue
@@ -9,10 +7,7 @@ from interactivities.repository import Repository as Repository_interactive
 from organizations.repository import Repository as Repository_Organization
 import minios3.services as services
 
-
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from config import URL_BACK, TELEGRAM_TEST_CHAT_ID
 
 router = APIRouter(
     prefix="/api/broadcasts",
@@ -77,7 +72,7 @@ async def get_send(
         await Repository.save_image(saved_file)
 
 
-        url = os.getenv("URL")
+        url = URL_BACK
 
         file_data = {
             "url": f"{url}{bucket}/{unique}",
@@ -85,7 +80,7 @@ async def get_send(
             "unique_filename": unique,
             "bucket_name": bucket,
             "content_type": file.content_type,
-            "test_chat_id": os.getenv("TELEGRAM_TEST_CHAT_ID")
+            "test_chat_id": TELEGRAM_TEST_CHAT_ID
         }
 
     # Проверяем, что есть что отправлять

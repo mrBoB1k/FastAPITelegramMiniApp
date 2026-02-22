@@ -1,11 +1,11 @@
-import os
 import asyncio
 import redis
-import tempfile
 from rq import Worker, Queue
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
+
+from config import BOT_TOKEN, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, REDIS_HOST, REDIS_PORT
 
 # Настройки ограничений Telegram
 MAX_MESSAGES_PER_SECOND = 25
@@ -14,7 +14,7 @@ DELAY_BETWEEN_MESSAGES = 1.0 / MAX_MESSAGES_PER_SECOND
 
 class TelegramSender:
     def __init__(self):
-        self.bot = Bot(token=os.getenv('BOT_TOKEN'))
+        self.bot = Bot(token=BOT_TOKEN)
         self.file_cache = {}
 
         # Инициализация MinIO клиента - ПРОСТАЯ ВЕРСИЯ
@@ -22,8 +22,8 @@ class TelegramSender:
             from minio import Minio
             self.minio_client = Minio(
                 "minio:9000",
-                access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-                secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+                access_key=MINIO_ACCESS_KEY,
+                secret_key=MINIO_SECRET_KEY,
                 secure=False
             )
             print("✅ MinIO client initialized successfully")
@@ -258,8 +258,8 @@ if __name__ == "__main__":
 
     # Подключение к Redis
     redis_conn = redis.Redis(
-        host=os.getenv('REDIS_HOST', 'redis'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
+        host=REDIS_HOST,
+        port=REDIS_PORT,
         db=0
     )
 

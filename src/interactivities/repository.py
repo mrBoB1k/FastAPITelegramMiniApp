@@ -17,10 +17,7 @@ from interactivities.schemas import InteractiveCreate, InteractiveId, \
 from minios3.schemas import ImageModel
 import minios3.services as services
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
+from config import URL_BACK
 
 class Repository:
     @classmethod
@@ -280,7 +277,7 @@ class Repository:
                     )
                     image_data = image_result.scalars().first()
                     if image_data is not None:
-                        url = os.getenv("URL")
+                        url = URL_BACK
                         image = f"{url}{image_data.bucket_name}/{image_data.unique_filename}"
 
                 questions_data.append(

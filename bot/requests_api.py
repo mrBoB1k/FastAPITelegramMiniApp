@@ -1,22 +1,17 @@
 import certifi
 import aiohttp
-import os
 import ssl
 
-from dotenv import load_dotenv
+from config import SECRET_KEY, URL_BACK
 
-load_dotenv()
 
-# _URL = "http://127.0.0.1:8000"
-_URL = "http://fastapi_app:8000"
-# получение роли пользователя
+_URL = URL_BACK
 
-# _URL = "https://carclicker.ru"
 
 async def get_role(message):
-    url = f"{_URL}/api/users/register"
+    url = f"{_URL}api/users/register"
     params = {
-        "x_key": os.getenv("SECRET_KEY"),
+        "x_key": SECRET_KEY,
         "telegram_id": message.from_user.id,
         "username": message.from_user.username,
         "first_name": message.from_user.first_name,
@@ -39,9 +34,9 @@ async def get_role(message):
             return response_data.get("role")
 
 async def add_organization_participants(message, telegram_id: int, role: str):
-    url = f"{_URL}/api/organization/participants2"
+    url = f"{_URL}api/organization/participants2"
     params = {
-        "x_key": os.getenv("SECRET_KEY"),
+        "x_key": SECRET_KEY,
         "telegram_id": telegram_id,
         "participant_telegram_id": message.from_user.id,
         "role": role,
@@ -62,9 +57,9 @@ async def add_organization_participants(message, telegram_id: int, role: str):
             return response_data.get("role")
 
 async def check_code(code: str) -> int | None:
-    url = f"{_URL}/api/interactivities/join"
+    url = f"{_URL}api/interactivities/join"
     params = {
-        "x_key": os.getenv("SECRET_KEY"),
+        "x_key": SECRET_KEY,
         "code": code
     }
 
@@ -87,9 +82,9 @@ async def check_code(code: str) -> int | None:
     # return 1213
 
 async def change_user_role(telegram_id: int, role: str):
-    url = f"{_URL}/api/users/user_change_role"
+    url = f"{_URL}api/users/user_change_role"
     params = {
-        "x_key": os.getenv("SECRET_KEY"),
+        "x_key": SECRET_KEY,
         "telegram_id": telegram_id,
         "role": role
     }

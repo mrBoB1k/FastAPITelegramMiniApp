@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код воркера
-COPY worker.py .
+COPY . .
 
 # Запускаем воркер
 CMD ["python", "worker.py"]

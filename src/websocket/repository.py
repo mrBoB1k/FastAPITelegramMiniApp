@@ -1,13 +1,10 @@
-from sqlalchemy import select, exists, delete, desc, asc
+from sqlalchemy import select, exists, delete
 from database import new_session
 from models import *
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, QuestionType, \
-    Percentage, Winner, AnswerGet, WinnerDiscussion, PercentageTypeText
-from collections import Counter
-from dotenv import load_dotenv
-import os
+    Percentage, AnswerGet, WinnerDiscussion, PercentageTypeText
 
-load_dotenv()
+from config import URL_BACK
 
 
 class Repository:
@@ -73,7 +70,7 @@ class Repository:
             )
 
             questions_with_images = result.all()
-            url = os.getenv("URL")
+            url = URL_BACK
             return [
                 QuestionSchema(
                     id=q.id,

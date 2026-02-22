@@ -1,18 +1,20 @@
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException
 from minio import Minio
 from minio.error import S3Error
 import io
-import os
+
 import transliterate
 import re
 
 from minios3.schemas import ImageModel
 
+from config import MINIO_ACCESS_KEY, MINIO_SECRET_KEY
+
 # Конфигурация MinIO
 minio_client = Minio(
     "minio:9000",
-    access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-    secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
     secure=False
 )
 

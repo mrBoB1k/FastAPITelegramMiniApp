@@ -1,16 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
-from typing import Annotated
-import io
+from fastapi import APIRouter, HTTPException, status
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from openpyxl.styles import Font, PatternFill, Border, Side
 from openpyxl.writer.excel import save_virtual_workbook
 import transliterate
 import re
 from datetime import time
 
-from reports.schemas import TelegramId, InteractiveList, ExportGet, ExportEnum, ReturnUrl
+from reports.schemas import ExportGet, ExportEnum, ReturnUrl
 from reports.repository import Repository
 
 from interactivities.schemas import InteractiveType
@@ -19,10 +16,7 @@ from broadcasts.repository import Repository as Repository_broadcasts
 from organizations.repository import Repository as Repository_Organization
 import minios3.services as services
 
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
+from config import URL_BACK
 
 router = APIRouter(
     prefix="/api/reports",
@@ -102,7 +96,7 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                                                         size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-        url = os.getenv("URL")
+        url = URL_BACK
         return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
     elif input_data.report_type == ExportEnum.forLeader.value:
@@ -558,7 +552,7 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                                                         size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-        url = os.getenv("URL")
+        url = URL_BACK
         return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
     else:
