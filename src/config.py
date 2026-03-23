@@ -2,6 +2,7 @@ import os
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 URL_BACK = os.getenv("URL_BACK")
+URL_MINIO = os.getenv("URL_MINIO")
 TELEGRAM_TEST_CHAT_ID = os.getenv("TELEGRAM_TEST_CHAT_ID")
 
 
@@ -16,3 +17,8 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+
+EMAIL_LOGIN = os.getenv("EMAIL_LOGIN")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_SMTP_SERVER = os.getenv("EMAIL_SMTP_SERVER")
+EMAIL_SMTP_PORT = int(os.getenv("EMAIL_SMTP_PORT"))

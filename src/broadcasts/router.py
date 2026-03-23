@@ -7,7 +7,7 @@ from interactivities.repository import Repository as Repository_interactive
 from organizations.repository import Repository as Repository_Organization
 import minios3.services as services
 
-from config import URL_BACK, TELEGRAM_TEST_CHAT_ID
+from config import URL_MINIO, TELEGRAM_TEST_CHAT_ID
 
 router = APIRouter(
     prefix="/api/broadcasts",
@@ -72,7 +72,7 @@ async def get_send(
         await Repository.save_image(saved_file)
 
 
-        url = URL_BACK
+        url = URL_MINIO
 
         file_data = {
             "url": f"{url}{bucket}/{unique}",

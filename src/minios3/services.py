@@ -1,14 +1,13 @@
-from fastapi import HTTPException
 from minio import Minio
 from minio.error import S3Error
 import io
-
 import transliterate
 import re
 
-from minios3.schemas import ImageModel
-
 from config import MINIO_ACCESS_KEY, MINIO_SECRET_KEY
+from exceptions import BucketCreationFailedException, FileUploadFailedException
+
+from minios3.schemas import ImageModel
 
 # Конфигурация MinIO
 minio_client = Minio(
@@ -18,13 +17,21 @@ minio_client = Minio(
     secure=False
 )
 
-async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, content_type: str, size: int, bucket_name: str) -> ImageModel:
+
+async def save_image_to_minio(
+        file: bytes,
+        filename: str,
+        unique_filename: str,
+        content_type: str,
+        size: int,
+        bucket_name: str
+) -> ImageModel:
     # Создаем бакет если не существует
     try:
         if not minio_client.bucket_exists(bucket_name):
             minio_client.make_bucket(bucket_name)
     except S3Error as exc:
-        raise HTTPException(status_code=500, detail=f"Error creating bucket: {exc}")
+        raise BucketCreationFailedException(exc=str(exc))
 
     if '.' in filename:
         name_part, extension_part = filename.rsplit('.', 1)
@@ -34,7 +41,7 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
 
     translit_title = smart_translit(name_part).lower().replace(' ', '_')
     translit_title = re.sub(r'[^\w_]', '', translit_title)
-
+    original_filename = f"{translit_title}.{extension_part}" if extension_part else translit_title
     # Загружаем в MinIO
     try:
         minio_client.put_object(
@@ -44,13 +51,20 @@ async def save_image_to_minio(file: bytes, filename: str, unique_filename: str, 
             length=size,
             content_type=content_type,
             metadata={
-                "original-filename": f"{translit_title}.{extension_part}"
+                "original-filename": f"{translit_title}.{extension_part}",
+                "Content-Disposition": f"attachment; filename*=UTF-8''{original_filename}"
             }
         )
     except S3Error as exc:
-        raise HTTPException(status_code=500, detail=f"Error uploading file: {exc}")
+        raise FileUploadFailedException(exc=str(exc))
 
-    return ImageModel(filename=filename, unique_filename=unique_filename, content_type=content_type,size=size, bucket_name=bucket_name)
+    return ImageModel(
+        filename=filename,
+        unique_filename=unique_filename,
+        content_type=content_type,
+        size=size,
+        bucket_name=bucket_name
+    )
 
 
 async def delete_image_from_minio(unique_filename: str, bucket_name: str) -> str:
@@ -61,18 +75,6 @@ async def delete_image_from_minio(unique_filename: str, bucket_name: str) -> str
             object_name=unique_filename
         )
         return "True"
-    except S3Error as exc:
-        return f"{exc}"
-
-
-async def get_image_from_minio(unique_filename: str, bucket_name: str) -> str:
-    # Удаляем объекты из бакета MinIO
-    try:
-        file = minio_client.get_object(
-            bucket_name=bucket_name,
-            object_name=unique_filename
-        )
-        return file
     except S3Error as exc:
         return f"{exc}"
 

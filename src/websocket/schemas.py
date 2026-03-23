@@ -1,8 +1,9 @@
-from pydantic import BaseModel, ConfigDict, field_validator, ValidationError
+from pydantic import BaseModel, ConfigDict
 import enum
-from users.schemas import UserRoleEnum
 from fastapi import WebSocket
+
 from interactivities.schemas import InteractiveType as QuestionType
+from users.schemas import UserRoleEnum
 
 
 # enum для обработки логики

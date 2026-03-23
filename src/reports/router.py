@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill, Border, Side
@@ -6,17 +6,20 @@ from openpyxl.writer.excel import save_virtual_workbook
 import transliterate
 import re
 from datetime import time
+from typing import Annotated
+
+from exceptions import InteractiveNotConductedException
+from interactivities.schemas import InteractiveType
+from interactivities.repository import Repository as Repository_interactive
+from broadcasts.repository import Repository as Repository_broadcasts
+import minios3.services as services
+from config import URL_MINIO
+from auth.router import get_current_active_token
+from auth.schemas import TokenData
 
 from reports.schemas import ExportGet, ExportEnum, ReturnUrl
 from reports.repository import Repository
 
-from interactivities.schemas import InteractiveType
-from interactivities.repository import Repository as Repository_interactive
-from broadcasts.repository import Repository as Repository_broadcasts
-from organizations.repository import Repository as Repository_Organization
-import minios3.services as services
-
-from config import URL_BACK
 
 router = APIRouter(
     prefix="/api/reports",
@@ -25,20 +28,14 @@ router = APIRouter(
 
 
 @router.post("/export")
-async def get_export(input_data: ExportGet) -> ReturnUrl:
-    user_id = await Repository_Organization.get_user_id_by_telegram_id(input_data.telegram_id)
-    if user_id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    organization_data = await Repository_Organization.get_organization_participant_id_and_organization_id_by_user_id(
-        user_id)
-    if organization_data is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization participant not found")
-
+async def get_export(
+        current_token: Annotated[TokenData, Depends(get_current_active_token)],
+        input_data: ExportGet
+) -> ReturnUrl:
     for interactive_id in input_data.interactive_id:
-        flag = await Repository.check_user_conducted_interactive(organization_id=organization_data.organization_id, interactive_id=interactive_id.id)
+        flag = await Repository.check_user_conducted_interactive(organization_id=current_token.organization_id, interactive_id=interactive_id.id)
         if not flag:
-            raise HTTPException(status_code=404,
-                                detail=f"interactive id {interactive_id.id} not found on organization, or not conducted")
+            raise InteractiveNotConductedException()
 
     bucket = "reports"
 
@@ -96,10 +93,10 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                                                         size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-        url = URL_BACK
+        url = URL_MINIO
         return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
-    elif input_data.report_type == ExportEnum.forLeader.value:
+    else:
         wb = Workbook()
         wb.remove(wb.active)  # Удаляем дефолтный лист
 
@@ -552,11 +549,9 @@ async def get_export(input_data: ExportGet) -> ReturnUrl:
                                                         size=len(file_bytes), bucket_name=bucket)
 
         await Repository_broadcasts.save_image(saved_file)
-        url = URL_BACK
+        url = URL_MINIO
         return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
 
-    else:
-        raise HTTPException(status_code=400, detail="Invalid export type")
 
 
 def smart_translit(text):

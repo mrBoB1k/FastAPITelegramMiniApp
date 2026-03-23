@@ -1,6 +1,5 @@
 from typing import List
 from sqlalchemy import select, delete, case
-from datetime import datetime
 import pytz
 import random
 import string
@@ -11,13 +10,14 @@ from database import new_session
 from models import *
 
 from interactivities.schemas import InteractiveCreate, InteractiveId, \
-    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractives, FilterEnum, \
+    Interactive as InteractiveFull, Answer as AnswerFull, Question as QuestionFull, MyInteractive, FilterEnum, \
     InteractiveList
 
 from minios3.schemas import ImageModel
 import minios3.services as services
 
-from config import URL_BACK
+from config import URL_MINIO
+
 
 class Repository:
     @classmethod
@@ -111,9 +111,12 @@ class Repository:
                 return unique_filename
 
     @classmethod
-    async def get_interactives(cls, organization_id: int, organization_participant_id: int, filter: FilterEnum,
+    async def get_interactives(cls, organization_id: int,
+                               organization_participant_id: int,
+                               filter: FilterEnum,
                                from_number: int,
-                               to_number: int) -> MyInteractives:
+                               to_number: int
+                               ) -> MyInteractive:
         async with new_session() as session:
             # Подзапрос для подсчета количества участников
             participant_count_subq = (
@@ -149,8 +152,8 @@ class Repository:
                     Interactive.conducted,
                     Interactive.date_completed,
                     func.coalesce(participant_count_subq.c.participant_count, 0).label('participant_count'),
-                OrganizationParticipant.id.label('org_participant_id'),
-                OrganizationParticipant.name.label('org_participant_name')
+                    OrganizationParticipant.id.label('org_participant_id'),
+                    OrganizationParticipant.name.label('org_participant_name')
                 )
                 .join(
                     participant_count_subq,
@@ -216,8 +219,8 @@ class Repository:
             # Определяем, достигнут ли конец списка
             is_end = total_count <= to_number + 1 or len(interactives_list) < (to_number - from_number + 1)
 
-            return MyInteractives(
-                interactives_list=interactives_list,
+            return MyInteractive(
+                interactive_list=interactives_list,
                 is_end=is_end
             )
 
@@ -277,7 +280,7 @@ class Repository:
                     )
                     image_data = image_result.scalars().first()
                     if image_data is not None:
-                        url = URL_BACK
+                        url = URL_MINIO
                         image = f"{url}{image_data.bucket_name}/{image_data.unique_filename}"
 
                 questions_data.append(

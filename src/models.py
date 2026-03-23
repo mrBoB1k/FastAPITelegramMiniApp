@@ -27,7 +27,6 @@ class User(AsyncAttrs, Base):
     first_name = Column(Text, nullable=False)
     last_name = Column(Text, nullable=True)
     phone_number = Column(Text, nullable=True)
-    # role = Column(Enum(UserRole), nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
 
 
@@ -44,10 +43,28 @@ class OrganizationParticipant(AsyncAttrs, Base):
 
     id = Column(Integer, primary_key=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("organization_users.id"))
     name = Column(Text, nullable=False)
     role = Column(Enum(UserRoleEnum), nullable=False)
 
+class OrganizationUser(AsyncAttrs, Base):
+    __tablename__ = 'organization_users'
+
+    id = Column(Integer, primary_key=True)
+    login = Column(Text, unique=True, nullable=False)
+    password_hash = Column(Text, nullable=False)
+    email = Column(Text, unique=True, nullable=False)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+
+class Session(AsyncAttrs, Base):
+    __tablename__ = 'sessions'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("organization_users.id"))
+    token_hash = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    expires_at = Column(TIMESTAMP, nullable=False)
+    revoked_at = Column(TIMESTAMP, nullable=True)
 
 class Interactive(AsyncAttrs, Base):
     __tablename__ = 'interactives'

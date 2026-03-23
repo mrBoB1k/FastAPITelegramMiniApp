@@ -1,5 +1,4 @@
-from fastapi import UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import enum
 
 from models import UserRoleEnum
@@ -21,12 +20,7 @@ class FilterEnum(str, enum.Enum):
     conducted = "conducted"
     not_conducted = "not_conducted"
 
-
-class TelegramId(BaseModel):
-    telegram_id: int
-
 class GetDataInteractive(BaseModel):
-    telegram_id: int
     filter: FilterEnum
     from_number: int
     to_number: int
@@ -106,6 +100,6 @@ class InteractiveList(BaseModel):
     is_you: bool
 
 
-class MyInteractives(BaseModel):
-    interactives_list: list[InteractiveList]
+class MyInteractive(BaseModel):
+    interactive_list: list[InteractiveList]
     is_end: bool

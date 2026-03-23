@@ -1,11 +1,12 @@
-from typing import List, Callable, Any, Coroutine
+from typing import List, Callable, Any
 import asyncio
+import weakref
 from enum import Enum
-from websocket.schemas import InteractiveInfo, InteractiveStatus, Question, StageCountdown, DataStageCountdown, \
-    DataStageQuestion, StageQuestion, DataStageDiscussion, StageDiscussion, DataStageEnd, StageEnd, DataStageWaiting, \
+
+from websocket.schemas import InteractiveInfo, Question, StageCountdown, DataStageCountdown, DataStageQuestion, \
+    StageQuestion, DataStageDiscussion, StageDiscussion, DataStageEnd, StageEnd, DataStageWaiting, \
     StageWaiting, AnswerGet, Answer, InteractiveStatus, StatePause, DataPause, QuestionType
 from websocket.repository import Repository
-import weakref
 
 
 class Stage(str, Enum):
@@ -17,10 +18,14 @@ class Stage(str, Enum):
 
 
 class InteractiveSession:
-    def __init__(self, meta_data: InteractiveInfo, questions: List[Question],
-                 broadcast_callback: Callable[[int, str], Any],
-                 get_participants_count: Callable[[int], Any],
-                 session_manager):
+    def __init__(
+            self,
+            meta_data: InteractiveInfo,
+            questions: List[Question],
+            broadcast_callback: Callable[[int, str], Any],
+            get_participants_count: Callable[[int], Any],
+            session_manager
+    ):
         self.interactive_id: int = meta_data.interactive_id  # из бд
         self.code: str = meta_data.code  # из бд
         self.title: str = meta_data.title  # из бд
@@ -40,8 +45,8 @@ class InteractiveSession:
 
         self.question_index: int = -1  # индекс текущий вопрос
         self.questions: List[Question] = questions  # сохраняю в оперативу сразу все вопросы
-        self.current_question: Question | None = None # для простаты запоминаю текущий вопрос
-        self.current_answers: list[AnswerGet] | None = None # оптимизация получения вопросов
+        self.current_question: Question | None = None  # для простаты запоминаю текущий вопрос
+        self.current_answers: list[AnswerGet] | None = None  # оптимизация получения вопросов
 
         self.get_participants_count = get_participants_count  # callback для получения кол-во активных пользователей
         self.broadcast_callback = broadcast_callback  # callback для отправки сообщения
@@ -138,13 +143,17 @@ class InteractiveSession:
                 else:
                     self.question_index += 1
                     self.current_question = self.questions[self.question_index]
-                    self.current_answers = await Repository.get_question_answers(self.current_question.id)
+                    self.current_answers = await Repository.get_question_answers(question_id=self.current_question.id)
                     self.stage = new_stage
                     self.timer_for_rating = 0
                     return
             elif new_stage == Stage.DISCUSSION:
                 await asyncio.sleep(1)
-                await Repository.add_time_for_question(interactive_id=self.interactive_id,question_id=self.current_question.id,time_question=self.timer_for_rating)
+                await Repository.add_time_for_question(
+                    interactive_id=self.interactive_id,
+                    question_id=self.current_question.id,
+                    time_question=self.timer_for_rating
+                )
                 self.stage = new_stage
                 return
             else:
@@ -183,8 +192,12 @@ class InteractiveSession:
             stage_now = self.stage
             await asyncio.sleep(1)
             participants_count = await  self.get_participants_count(self.interactive_id)
-            data = DataStageWaiting(title=self.title, description=self.description, code=self.code,
-                                    participants_active=participants_count)
+            data = DataStageWaiting(
+                title=self.title,
+                description=self.description,
+                code=self.code,
+                participants_active=participants_count
+            )
 
             self.timer_n -= 1
             if self.timer_n <= 0:
@@ -207,8 +220,11 @@ class InteractiveSession:
         """цикл для фазы обратного отчёта"""
         while self.remaining_time >= 0 and self.stage != Stage.END:
             stage_now = self.stage
-            await self.broadcast_callback(self.interactive_id, StageCountdown(stage=stage_now, data=DataStageCountdown(
-                timer=self.remaining_time)), stage_now)
+            await self.broadcast_callback(
+                self.interactive_id,
+                StageCountdown(stage=stage_now, data=DataStageCountdown(timer=self.remaining_time)),
+                stage_now
+            )
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
         await self._change_stage(Stage.QUESTION)
@@ -224,9 +240,14 @@ class InteractiveSession:
             if question_type == QuestionType.one or question_type == QuestionType.many:
                 answer = [Answer(**ans.dict(include={'id', 'text'})) for ans in self.current_answers]
 
-            data = DataStageQuestion(questions_count=len(self.questions), timer=self.remaining_time,
-                                     timer_duration=self.timer_duration, title=self.title, code=self.code,
-                                     question=self.current_question)
+            data = DataStageQuestion(
+                questions_count=len(self.questions),
+                timer=self.remaining_time,
+                timer_duration=self.timer_duration,
+                title=self.title,
+                code=self.code,
+                question=self.current_question
+            )
 
             if self.second_step == 0:
                 self.timer_n -= 1
@@ -253,10 +274,15 @@ class InteractiveSession:
         while self.remaining_time >= 0 and self.stage != Stage.END:
             stage_now = self.stage
             question_type = self.current_question.type
-            winners =  await Repository.get_winners_discussion(self.interactive_id)
-            data = DataStageDiscussion(questions_count=len(self.questions), timer=self.remaining_time,
-                                       timer_duration=self.timer_duration, title=self.title, code=self.code,
-                                       question=self.current_question)
+            winners = await Repository.get_winners_discussion(interactive_id=self.interactive_id)
+            data = DataStageDiscussion(
+                questions_count=len(self.questions),
+                timer=self.remaining_time,
+                timer_duration=self.timer_duration,
+                title=self.title,
+                code=self.code,
+                question=self.current_question
+            )
             if self.second_step == 0:
                 self.timer_n -= 1
                 if self.timer_n <= 0:
@@ -264,7 +290,7 @@ class InteractiveSession:
                         self.timer_n = 5 * 60
                         self.state = StatePause.timer_n
             pause = DataPause(state=self.state, timer_n=self.timer_n)
-            result = StageDiscussion(stage=stage_now, pause=pause, data=data, data_answers=None,  winners=winners)
+            result = StageDiscussion(stage=stage_now, pause=pause, data=data, data_answers=None, winners=winners)
             await self.broadcast_callback(self.interactive_id, result, stage_now, question_type=question_type)
             await asyncio.sleep(1)
             self.remaining_time -= self.second_step
@@ -278,8 +304,8 @@ class InteractiveSession:
     async def _end_interactive(self):
         """Обработка завершения интерактива"""
         stage_now = self.stage
-        participants_total = await Repository.get_participant_count(self.interactive_id)
+        participants_total = await Repository.get_participant_count(interactive_id=self.interactive_id)
         data = DataStageEnd(title=self.title, participants_total=participants_total)
         await self.broadcast_callback(self.interactive_id, StageEnd(stage=stage_now, data=data), stage_now)
         # Помечаем интерактив как завершённый в БД
-        await Repository.mark_interactive_conducted(self.interactive_id)
+        await Repository.mark_interactive_conducted(interactive_id=self.interactive_id)

@@ -26,7 +26,6 @@ class InteractiveId(BaseModel):
     id: int
 
 class ExportGet(BaseModel):
-    telegram_id: int
     interactive_id: list[InteractiveId]
     report_type: ExportEnum
 

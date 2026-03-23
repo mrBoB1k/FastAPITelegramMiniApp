@@ -1,11 +1,10 @@
 import pytz
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from database import new_session
 from models import *
 from datetime import datetime
-from reports.schemas import PreviewInteractive, InteractiveList, ExportForAnalise, ExportForLeaderData, \
-    ExportForLeaderHeader, ExportForLeaderBody, QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer, \
-    DateTitleSH
+from reports.schemas import ExportForAnalise, ExportForLeaderData, ExportForLeaderHeader, ExportForLeaderBody, \
+    QuestionForLeaderHeader, AnswerForLeaderHeader, ParticipantAnswer, DateTitleSH
 from fastapi import HTTPException
 
 
@@ -123,8 +122,7 @@ class Repository:
             return None
 
         utc_time = pytz.UTC.localize(date_obj)
-        yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))\
-
+        yekat_time = utc_time.astimezone(pytz.timezone('Asia/Yekaterinburg'))
         return yekat_time.strftime('%d.%m.%Y')
 
     @staticmethod
@@ -279,7 +277,7 @@ class Repository:
                     )
                 )
 
-            body_data.sort(key= lambda x: (-x.total_score, x.total_time))
+            body_data.sort(key=lambda x: (-x.total_score, x.total_time))
 
             return ExportForLeaderData(
                 header=header,
@@ -296,8 +294,6 @@ class Repository:
             if data is not None:
                 return DateTitleSH(title=data.title, date_completed=cls._format_date3(data.date_completed))
             return data
-
-
 
     @classmethod
     async def check_user_conducted_interactive(cls, organization_id: int, interactive_id: int) -> bool:
@@ -323,4 +319,4 @@ class Repository:
             if organization is None:
                 return False
 
-            return True
+            return organization == organization_id

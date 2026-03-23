@@ -1,10 +1,11 @@
 from sqlalchemy import select, exists, delete
 from database import new_session
+
+from config import URL_MINIO
 from models import *
+
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, QuestionType, \
     Percentage, AnswerGet, WinnerDiscussion, PercentageTypeText
-
-from config import URL_BACK
 
 
 class Repository:
@@ -21,17 +22,6 @@ class Repository:
             )
             return result.scalar()
 
-    @classmethod
-    async def check_interactive(cls, interactive_id: int) -> bool:
-        async with new_session() as session:
-            result = await session.execute(
-                select(
-                    exists().where(
-                        Interactive.id == interactive_id
-                    )
-                )
-            )
-            return result.scalar()
 
     @classmethod
     async def get_interactive_info(cls, interactive_id: int) -> InteractiveInfo:
@@ -41,16 +31,18 @@ class Repository:
             )
             interactive = result.scalar_one_or_none()
 
-            return InteractiveInfo(interactive_id=interactive.id,
-                                   code=interactive.code,
-                                   title=interactive.title,
-                                   description=interactive.description,
-                                   answer_duration=interactive.answer_duration,
-                                   discussion_duration=interactive.discussion_duration,
-                                   countdown_duration=interactive.countdown_duration)
+            return InteractiveInfo(
+                interactive_id=interactive.id,
+                code=interactive.code,
+                title=interactive.title,
+                description=interactive.description,
+                answer_duration=interactive.answer_duration,
+                discussion_duration=interactive.discussion_duration,
+                countdown_duration=interactive.countdown_duration
+            )
 
     @classmethod
-    async def get_interactive_conducted(cls, interactive_id: int) -> bool:
+    async def get_interactive_conducted(cls, interactive_id: int) -> bool | None:
         async with new_session() as session:
             result = await session.execute(
                 select(Interactive.conducted).where(Interactive.id == interactive_id)
@@ -70,7 +62,7 @@ class Repository:
             )
 
             questions_with_images = result.all()
-            url = URL_BACK
+            url = URL_MINIO
             return [
                 QuestionSchema(
                     id=q.id,
@@ -258,7 +250,7 @@ class Repository:
             return result
 
     @classmethod
-    async def get_user_score(cls, user_id: int, interactive_id:int) -> int:
+    async def get_user_score(cls, user_id: int, interactive_id: int) -> int:
         async with new_session() as session:
             stmt = (
                 select(func.coalesce(func.sum(Question.score), 0))
@@ -304,7 +296,6 @@ class Repository:
 
             result = await session.execute(query)
             user_answer = result.scalars().first()
-
 
             if user_answer and user_answer.answer_type == "text":
                 data = user_answer.selected_answer_ids

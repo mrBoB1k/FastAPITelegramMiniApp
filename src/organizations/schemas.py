@@ -1,5 +1,4 @@
 import enum
-
 from pydantic import BaseModel
 
 from models import UserRoleEnum
@@ -12,6 +11,7 @@ class UserRole(BaseModel):
 class NameInOrganization(BaseModel):
     name: str
     username: str
+    email: str
     organization_name: str
     role: UserRoleEnum
 
@@ -33,22 +33,10 @@ class ListOrganizationParticipants(BaseModel):
     participants: list[OrganizationParticipantData]
 
 
-class OrganizationId(BaseModel):
-    organization_id: int
-
-
-class UserIdUsername(BaseModel):
-    user_id: int
-    username: str
-
 class OrganizationParticipantIdOrganizationId(BaseModel):
     organization_participant_id: int
     organization_id: int
 
-class OrganizationParticipantIdOrganizationIdRole(BaseModel):
-    organization_participant_id: int
-    organization_id: int
-    role: UserRoleEnum
 
 class NameRoleOrganizationId(BaseModel):
     name: str
@@ -56,8 +44,14 @@ class NameRoleOrganizationId(BaseModel):
     organization_id: int
 
 
-class NameRoleOrganizationIdAndUserId(NameRoleOrganizationId):
+class NameRoleOrganizationIdUserIdParticipantId(NameRoleOrganizationId):
+    participant_id: int
     user_id: int
+
+class NameUsername(BaseModel):
+    name: str
+    username: str #login in db
+    email: str
 
 
 class FilterListOrganizationParticipantsEnum(str, enum.Enum):
@@ -72,7 +66,3 @@ class ChangeRoleEnum(str, enum.Enum):
     admin = "admin"
     remote = "remote"
 
-
-class AddOrganizationParticipantsEnum(str, enum.Enum):
-    leader = "leader"
-    admin = "admin"

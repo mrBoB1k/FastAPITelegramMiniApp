@@ -1,4 +1,4 @@
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from database import new_session
 from users.schemas import UserRegister
 from models import *
