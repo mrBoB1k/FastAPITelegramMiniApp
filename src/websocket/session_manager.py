@@ -1,21 +1,24 @@
 from fastapi import WebSocket
 
-from exceptions import InteractiveRunningNowWSException
+from exceptions import InteractiveRunningNowWSException, NameIsTooLongWSException
 from users.schemas import UserRoleEnum
 
 from websocket.InteractiveSession import InteractiveSession, Stage
+from websocket.moderation_manager import ModerationManager
 from websocket.repository import Repository
 from websocket.schemas import LeaderSent, ParticipantSent, WebSocketConnection, CreateQuizParticipant, \
     QuestionType, StageWaiting, StageCountdown, StageQuestion, StageDiscussion, StageEnd, \
     DataAnswersStageDiscussionTypeOne, DataAnswersStageDiscussionTypeMany, DataAnswersStageDiscussionTypeTextLeader, \
     DataAnswersStageDiscussionTypeTextParticipantTrue, DataAnswersStageDiscussionTypeTextParticipantFalse, \
-    StageDiscussionParticipant, CorrectAnswerStageDiscussionTypeTextLeader, StageEndParticipant, Winner, ScoreStageEnd
+    StageDiscussionParticipant, CorrectAnswerStageDiscussionTypeTextLeader, StageEndParticipant, Winner, ScoreStageEnd, \
+    DataPause, StatePause, DataStageWaiting
 
 
 class SessionManager:
-    def __init__(self):
+    def __init__(self, moderation_manager: ModerationManager):
         self.active_connections: dict[int, list[WebSocketConnection]] = {}  # interactive_id : list WebSocketConnection
         self.interactive_sessions: dict[int, InteractiveSession] = {}  # interactive_id : InteractiveSession
+        self.moderation_manager = moderation_manager
 
     async def connect(self, websocket: WebSocket, interactive_id: int, user_id: int, role: UserRoleEnum):
         """Создание интерактива, если его нет. Подключение вебсокета к интерактиву"""
@@ -50,7 +53,10 @@ class SessionManager:
                     WebSocketConnection(
                         websocket=websocket,
                         user_id=user_id,
-                        role=role
+                        role=role,
+                        is_hidden=False,
+                        is_blocked=False,
+                        participant_id=None,
                     )
                 )
 
@@ -78,13 +84,23 @@ class SessionManager:
                     raise InteractiveRunningNowWSException()
                 else:
                     await websocket.accept()
+                    participant_data = await Repository.register_quiz_participant(
+                        user_id=user_id,
+                        interactive_id=interactive_id,
+                        total_time=0
+                    )
                     self.active_connections[interactive_id].append(
                         WebSocketConnection(
                             websocket=websocket,
                             user_id=user_id,
-                            role=role
+                            role=role,
+                            participant_id=participant_data.id,
+                            is_hidden=participant_data.is_hidden,
+                            is_blocked=participant_data.is_blocked
                         )
                     )
+
+            await self.moderation_manager.broadcast(interactive_id=interactive_id)
 
     async def disconnect(self, interactive_id: int, user_id: int, role: UserRoleEnum):
         """Отключение вебсокета от интерактива"""
@@ -105,6 +121,7 @@ class SessionManager:
 
                 if target_conn is not None:
                     self.active_connections[interactive_id].remove(target_conn)
+                    await self.moderation_manager.broadcast(interactive_id=interactive_id)
 
     async def _broadcast_callback(
             self,
@@ -240,7 +257,9 @@ class SessionManager:
                         position=i + 1,
                         username=w["username"],
                         score=w["score"],
-                        time=w["total_time"]
+                        time=w["total_time"],
+                        participant_id=w["participant_id"],
+                        is_hidden=w["is_hidden"],
                     )
                 )
                 winners_dict[w["user_id"]] = ScoreStageEnd(
@@ -272,6 +291,25 @@ class SessionManager:
     async def handle_participant_message(self, participant: ParticipantSent, participant_id: int, interactive_id: int):
         """Обработка действий участика, запись его ответа в бд"""
         if interactive_id not in self.interactive_sessions:
+            return
+
+        target_conn = None
+        connections = self.active_connections.get(interactive_id, [])
+        for conn in connections:
+            if conn.participant_id == participant_id:
+                target_conn = conn
+                break
+
+        if target_conn.is_blocked:
+            return
+
+        if participant.name is not None:
+            name_len = len(participant.name)
+            if name_len < 2 or name_len > 32:
+                raise NameIsTooLongWSException()
+            flag = await Repository.set_participant_name(participant_id=participant_id, name=participant.name)
+            if flag:
+                await self.moderation_manager.broadcast(interactive_id=interactive_id)
             return
 
         question_data = await self.interactive_sessions[interactive_id].get_question_data()
@@ -345,7 +383,53 @@ class SessionManager:
         """Обработка действий ведущего, смена статуса интерактива"""
         if interactive_id not in self.interactive_sessions:
             return
-        await self.interactive_sessions[interactive_id].change_status(leader_sent.interactive_status)
+        if leader_sent.interactive_status is not None:
+            await self.interactive_sessions[interactive_id].change_status(leader_sent.interactive_status)
+        elif leader_sent.hide is not None:
+            flag = await Repository.toggle_participant_hidden(participant_id=leader_sent.hide, interactive_id=interactive_id)
+            connections = self.active_connections.get(interactive_id, [])
+            for conn in connections:
+                if conn.participant_id == leader_sent.hide:
+                    conn.is_hidden = True
+                    break
+            await self.moderation_manager.broadcast(interactive_id=interactive_id)
+
+    async def handle_moderation_block_participant(self, block_participant_id: int, interactive_id: int):
+        """Обработка действий модератора, блокировка пользователя"""
+        if interactive_id not in self.interactive_sessions:
+            return
+
+        flag = await Repository.block_participant(participant_id=block_participant_id, interactive_id=interactive_id)
+
+        target_conn = None
+        connections = self.active_connections.get(interactive_id, [])
+        for conn in connections:
+            if conn.participant_id == block_participant_id:
+                target_conn = conn
+                conn.is_blocked = True
+                break
+
+
+        if target_conn is not None:
+            message = await self.get_waiting_stage_to_blocked(interactive_id=interactive_id)
+            try:
+                await target_conn.websocket.send_json(message.model_dump())
+            except:
+                return
+            await target_conn.websocket.close(code=4006, reason='{"detail":{"message": "You have been removed from the interactive","code": "YOU_BEEN_REMOVED"}}')
+            self.active_connections[interactive_id].remove(target_conn)
+            await self.moderation_manager.broadcast(interactive_id=interactive_id)
+
+    async def get_waiting_stage_to_blocked(self, interactive_id: int) -> StageWaiting:
+        interactive = self.interactive_sessions[interactive_id]
+        data = DataStageWaiting(
+            title=interactive.title,
+            description=interactive.description,
+            code=interactive.code,
+            participants_active=await self._get_participants_count_callback(interactive_id=interactive_id),
+        )
+        message = StageWaiting(stage=Stage.WAITING, pause=DataPause(state=StatePause.no, timer_n=0), data=data)
+        return message
 
     async def remove_session(self, interactive_id: int):
         if interactive_id in self.interactive_sessions:

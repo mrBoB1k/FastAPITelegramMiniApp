@@ -1,5 +1,5 @@
 from pwdlib import PasswordHash
-from config import SECRET_KEY
+from config import SECRET_KEY, VK_APP_ID, VK_CLIENT_SECRET
 
 # to get a string like this run:
 # openssl rand -hex 32

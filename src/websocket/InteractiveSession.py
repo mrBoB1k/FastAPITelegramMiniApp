@@ -303,9 +303,12 @@ class InteractiveSession:
 
     async def _end_interactive(self):
         """Обработка завершения интерактива"""
-        stage_now = self.stage
-        participants_total = await Repository.get_participant_count(interactive_id=self.interactive_id)
-        data = DataStageEnd(title=self.title, participants_total=participants_total)
-        await self.broadcast_callback(self.interactive_id, StageEnd(stage=stage_now, data=data), stage_now)
-        # Помечаем интерактив как завершённый в БД
         await Repository.mark_interactive_conducted(interactive_id=self.interactive_id)
+        for i in range(60):
+            stage_now = self.stage
+            participants_total = await Repository.get_participant_count(interactive_id=self.interactive_id)
+            data = DataStageEnd(title=self.title, participants_total=participants_total)
+            await self.broadcast_callback(self.interactive_id, StageEnd(stage=stage_now, data=data), stage_now)
+            await asyncio.sleep(1)
+        # Помечаем интерактив как завершённый в БД
+

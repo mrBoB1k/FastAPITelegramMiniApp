@@ -409,7 +409,9 @@ async def get_interactive(
             position=i + 1,
             username=w["username"],
             score=w["score"],
-            time=w["total_time"]
+            time=w["total_time"],
+            participant_id=w["participant_id"],
+            is_hidden=w["is_hidden"]
         ))
 
     data = DataStageEnd(title=title, participants_total=participants_total, winners=winners)

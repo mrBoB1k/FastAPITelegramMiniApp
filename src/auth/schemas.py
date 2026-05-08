@@ -20,6 +20,37 @@ class TokenData(TokenSchema):
     token_id: int
     token_version: int
 
+class TokenRegisterData(BaseModel):
+    email: str
+    organization_id: int
+    role: str
+
+class VkDataSchema(BaseModel):
+    vk_token: str
+    vk_info: str
+    vk_email: str | None = None
+    vk_phone: str | None = None
+
+class VkTokenSchema(BaseModel):
+    vk_user_id: int
+    first_name: str
+    last_name: str
+    email: str | None = None
+    phone_number: str | None = None
+
+class VkTokenData(VkTokenSchema):
+    user_id: int
+
+class ParticipantTokenData(BaseModel):
+    user_id: int
+
+class VkUserInfo(BaseModel):
+    id: int
+    user_id: int
+    first_name: str
+    last_name: str
+    email: str | None = None
+    phone_number: str | None = None
 
 class RefreshTokenSchema(BaseModel):
     token_id: int

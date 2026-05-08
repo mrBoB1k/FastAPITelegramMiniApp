@@ -38,9 +38,20 @@ class ExportForAnalise(BaseModel):
     target_audience: str | None # из таблицы Interactive
     location: str | None # из таблицы Interactive
     responsible_full_name: str | None # из таблицы Interactive
-    telegram_id: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User telegram_id
-    username: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User username
-    full_name: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву и узнать из таблицы User first_name и last_name. После этого объединить их
+
+    provider: str
+
+    vk_id: int | None
+    first_name: str | None
+    last_name: str | None
+    email: str | None
+    phone_number: str | None
+
+    name: str
+    is_hidden: bool
+    is_blocked: bool
+
+
     correct_answers_count: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву. После в таблице UserAnswer посчитать кол-во, у которых is_correct = true
     total_time: str # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву, в ней взять total_time
     total_score: int # Надо найти в начале в QuizParticipant запись, которая относиться к заданному интерактиву. После в таблице UserAnswer найти все записи, где is_correct = true. По question_id перейти в таблицу questions и взять от туда score
@@ -80,12 +91,22 @@ class ParticipantAnswer(BaseModel):
 
 
 class ExportForLeaderBody(BaseModel):
-    telegram_id: int
-    username: str
-    full_name: str
+    provider: str
+
+    vk_id: int | None
+    first_name: str | None
+    last_name: str | None
+    email: str | None
+    phone_number: str | None
+
+    name: str
+    is_hidden: bool
+    is_blocked: bool
+
     correct_answers_count: int
     total_time: str
     total_score: int
+
     answers: list[ParticipantAnswer]
 
 class ExportForLeaderData(BaseModel):

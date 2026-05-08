@@ -56,7 +56,8 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY}
       URL_MINIO: ${URL_MINIO}
-      TELEGRAM_TEST_CHAT_ID: ${TELEGRAM_TEST_CHAT_ID}
+      URL_BACK: ${URL_BACK}
+      URL_FRONT: ${URL_FRONT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
@@ -70,6 +71,8 @@ services:
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
       EMAIL_SMTP_SERVER: ${EMAIL_SMTP_SERVER}
       EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT}
+      VK_APP_ID: ${VK_APP_ID}
+      VK_CLIENT_SECRET: ${VK_CLIENT_SECRET}
     ports:
       - "8000:8000"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload  --log-level debug
@@ -151,7 +154,7 @@ services:
 #        condition: service_healthy
 #    networks:
 #      - app_network
-
+#
 #  telegram_bot:
 #    build:
 #      context: ./bot

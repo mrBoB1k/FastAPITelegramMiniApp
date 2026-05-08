@@ -110,6 +110,7 @@ class PercentageTypeText(BaseModel):
     text: str
     percentage: float
 
+
 class Percentage(BaseModel):
     id: int
     percentage: float
@@ -158,6 +159,8 @@ class WinnerDiscussion(BaseModel):
     position: int
     username: str
     score: int
+    participant_id: int
+    is_hidden: bool
 
 
 class StageDiscussion(BaseModel):
@@ -175,6 +178,7 @@ class StageDiscussionParticipant(StageDiscussion):
 ###############################################################
 class Winner(WinnerDiscussion):
     time: int
+
 
 class ScoreStageEnd(BaseModel):
     position: int
@@ -197,15 +201,34 @@ class StageEndParticipant(StageEnd):
     score: ScoreStageEnd
 
 
+# отправка сообщений модератору
+class ModerationData(BaseModel):
+    username: str
+    participant_id: int
+    is_hidden: bool
+    is_blocked: bool
+
+
+class Moderation(BaseModel):
+    data: list[ModerationData]
+
+
 # обработка сообщений отправленных на бек по websocket
 class LeaderSent(BaseModel):
-    interactive_status: InteractiveStatus
+    interactive_status: InteractiveStatus | None = None
+    hide: int | None = None
+
+
+class ModerationSent(BaseModel):
+    block: int | None = None
+    hide: int | None = None
 
 
 class ParticipantSent(BaseModel):
     answer_id: int | None = None
     answer_ids: list[int] | None = None
     answer_text: str | None = None
+    name: str | None = None
 
 
 # добавление в бд участника интерактива
@@ -219,6 +242,9 @@ class CreateQuizParticipant(BaseModel):
 class WebSocketConnection(BaseModel):
     websocket: WebSocket
     user_id: int
+    participant_id: int | None
     role: UserRoleEnum
+    is_hidden: bool
+    is_blocked: bool
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

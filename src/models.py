@@ -18,15 +18,35 @@ class UserRoleEnum(str, enum.Enum):
 Base = declarative_base()
 
 
+class VkUser(AsyncAttrs, Base):
+    __tablename__ = 'vk_users'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    vk_user_id = Column(BigInteger, nullable=False)
+
+    first_name = Column(Text, nullable=False)
+    last_name = Column(Text, nullable=False)
+    email = Column(Text, nullable=True)
+    phone_number = Column(Text, nullable=True)
+
+    notification_is_enabled = Column(Boolean, nullable=False, default=False)
+
+
+class EmailUser(AsyncAttrs, Base):
+    __tablename__ = 'email_users'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+
+    email = Column(Text, nullable=True)
+
+
 class User(AsyncAttrs, Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(BigInteger, unique=True, nullable=False)
-    username = Column(Text, nullable=False)
-    first_name = Column(Text, nullable=False)
-    last_name = Column(Text, nullable=True)
-    phone_number = Column(Text, nullable=True)
+    provider = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
 
 
@@ -47,6 +67,7 @@ class OrganizationParticipant(AsyncAttrs, Base):
     name = Column(Text, nullable=False)
     role = Column(Enum(UserRoleEnum), nullable=False)
 
+
 class OrganizationUser(AsyncAttrs, Base):
     __tablename__ = 'organization_users'
 
@@ -55,6 +76,7 @@ class OrganizationUser(AsyncAttrs, Base):
     password_hash = Column(Text, nullable=False)
     email = Column(Text, unique=True, nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+
 
 class Session(AsyncAttrs, Base):
     __tablename__ = 'sessions'
@@ -65,6 +87,7 @@ class Session(AsyncAttrs, Base):
     created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     expires_at = Column(TIMESTAMP, nullable=False)
     revoked_at = Column(TIMESTAMP, nullable=True)
+
 
 class Interactive(AsyncAttrs, Base):
     __tablename__ = 'interactives'
@@ -125,6 +148,9 @@ class QuizParticipant(AsyncAttrs, Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     joined_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
     total_time = Column(Integer, nullable=False)
+    name = Column(Text, nullable=True)
+    is_hidden = Column(Boolean, nullable=False)
+    is_blocked = Column(Boolean, nullable=False)
 
 
 class UserAnswer(AsyncAttrs, Base):

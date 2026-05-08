@@ -2,8 +2,9 @@ import os
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 URL_BACK = os.getenv("URL_BACK")
+URL_FRONT = os.getenv("URL_FRONT")
 URL_MINIO = os.getenv("URL_MINIO")
-TELEGRAM_TEST_CHAT_ID = os.getenv("TELEGRAM_TEST_CHAT_ID")
+# TELEGRAM_TEST_CHAT_ID = os.getenv("TELEGRAM_TEST_CHAT_ID")
 
 
 DB_HOST = os.getenv("DB_HOST")
@@ -22,3 +23,6 @@ EMAIL_LOGIN = os.getenv("EMAIL_LOGIN")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_SMTP_SERVER = os.getenv("EMAIL_SMTP_SERVER")
 EMAIL_SMTP_PORT = int(os.getenv("EMAIL_SMTP_PORT"))
+
+VK_APP_ID = int(os.getenv("VK_APP_ID"))
+VK_CLIENT_SECRET = os.getenv("VK_CLIENT_SECRET")

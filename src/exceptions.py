@@ -117,6 +117,31 @@ class InvalidEmailException(HTTPException):
             },
         )
 
+class InvalidLoginException(HTTPException):
+    """Не правильный формат login"""
+
+    def __init__(self):
+        super().__init__(
+            status_code=400,
+            detail={
+                "message": "Login is invalid",
+                "code": "INVALID_LOGIN",
+            },
+        )
+
+
+class InvalidPasswordException(HTTPException):
+    """Не правильный формат password"""
+
+    def __init__(self):
+        super().__init__(
+            status_code=400,
+            detail={
+                "message": "Password is invalid",
+                "code": "INVALID_PASSWORD",
+            },
+        )
+
 class EmailSendException(HTTPException):
     """Ошибка при отправке письма на сервере"""
 
@@ -620,5 +645,29 @@ class InactiveUserWSException(WebSocketError):
             detail={
                 "message": "Inactive user",
                 "code": "INACTIVE_USER"
+            }
+        )
+
+class YouBeenRemoveWSException(WebSocketError):
+    """Пользователь задал слишком длинное имя"""
+
+    def __init__(self):
+        super().__init__(
+            code=4005,
+            detail={
+                "message": "You have been removed from the interactive",
+                "code": "YOU_BEEN_REMOVED"
+            }
+        )
+
+class NameIsTooLongWSException(WebSocketError):
+    """Пользователь задал слишком длинное имя"""
+
+    def __init__(self):
+        super().__init__(
+            code=4006,
+            detail={
+                "message": "Name is too long/short",
+                "code": "NAME_IS_TOO_LONG"
             }
         )

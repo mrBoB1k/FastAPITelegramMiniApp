@@ -1,6 +1,6 @@
 from datetime import timedelta
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, WebSocket, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from namer import generate
@@ -11,16 +11,20 @@ from models import UserRoleEnum
 from exceptions import CredentialsException, InactiveUserException, IncorrectUserDataException, \
     InvalidRefreshTokenException, MissingRefreshTokenException, CredentialsWSException, InactiveUserWSException, \
     LeaderCannotAddNewUserException, CannotAddUserAnotherOrganizationException, InvalidEmailException, \
-    EmailSendException
+    EmailSendException, InvalidLoginException, InvalidPasswordException
 from organizations.schemas import NameInOrganization
 from send_email import send_email, validate_receiver_email
 from organizations.repository import Repository as Repository_Organization
+from config import URL_FRONT
 
 from auth.repository import Repository
-from auth.schemas import Token, RefreshTokenSchema, TokenData, AddOrganizationParticipantsEnum
+from auth.schemas import Token, RefreshTokenSchema, TokenData, AddOrganizationParticipantsEnum, VkTokenData, \
+    VkDataSchema, VkTokenSchema, ParticipantTokenData
 from auth.untils import authenticate_user, create_access_token, create_refresh_token, decode_token, get_datetime_expire, \
-    check_refresh_token, get_password_hash
-from auth.auth_config import ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_COOKIE_NAME, REFRESH_TOKEN_EXPIRE_DAYS
+    check_refresh_token, get_password_hash, decode_base64, is_valid_vk_token, is_valid_vk_ts, generate_vk_sign, \
+    decode_token_for_participant, decode_token_for_register, decode_token_for_reset
+from auth.auth_config import ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_COOKIE_NAME, REFRESH_TOKEN_EXPIRE_DAYS, VK_APP_ID, \
+    VK_CLIENT_SECRET
 from auth.redis_dict import redis_dict
 
 router = APIRouter(prefix="/api/auth",
@@ -73,7 +77,7 @@ async def get_current_token_ws(websocket: WebSocket):
     """Проверка токена для WebSocket"""
     try:
         token = await get_token_from_websocket(websocket)
-        token_data = decode_token(token)  # ваша функция декодирования
+        token_data = decode_token(token)
 
         if token_data is None:
             await websocket.close()
@@ -96,6 +100,113 @@ async def get_current_active_token_ws(
         raise InactiveUserWSException()
 
     return current_token
+
+
+async def get_current_vk_token_for_participant_ws(websocket: WebSocket, vk_data: VkDataSchema):
+    """Проверка токена для WebSocket"""
+    try:
+        vk_token = decode_base64(vk_data.vk_token)
+        if not is_valid_vk_token(query=vk_token, secret=VK_CLIENT_SECRET):
+            await websocket.close()
+            raise CredentialsWSException()
+
+        if not is_valid_vk_ts(vk_ts=vk_token["vk_ts"]):
+            await websocket.close()
+            raise CredentialsWSException()
+
+        if int(vk_token["vk_app_id"]) != VK_APP_ID:
+            await websocket.close()
+            raise CredentialsWSException()
+
+        vk_info = decode_base64(vk_data.vk_info)
+
+        email = None
+        if vk_data.vk_email is not None:
+            vk_email = decode_base64(vk_data.vk_email)
+            email_sign = generate_vk_sign(app_id=VK_APP_ID,
+                                          api_secret=VK_CLIENT_SECRET,
+                                          vk_user_id=vk_token["vk_user_id"],
+                                          field_name="email",
+                                          field_value=vk_email["email"]
+                                          )
+            if email_sign != vk_email["sign"]:
+                await websocket.close()
+                raise CredentialsWSException()
+            email = vk_email["email"]
+
+        phone = None
+        if vk_data.vk_phone is not None:
+            vk_phone = decode_base64(vk_data.vk_phone)
+            phone_sign = generate_vk_sign(app_id=VK_APP_ID,
+                                          api_secret=VK_CLIENT_SECRET,
+                                          vk_user_id=vk_token["vk_user_id"],
+                                          field_name="phone_number",
+                                          field_value=vk_phone["phone_number"]
+                                          )
+            if phone_sign != vk_phone["sign"]:
+                await websocket.close()
+                raise CredentialsWSException()
+            phone = vk_phone["phone_number"]
+
+    except InvalidTokenError:
+        await websocket.close()
+        raise CredentialsWSException()
+
+    return VkTokenSchema(
+        vk_user_id=vk_token["vk_user_id"],
+        first_name=vk_info["first_name"],
+        last_name=vk_info["last_name"],
+        email=email,
+        phone_number=phone
+    )
+
+
+async def get_decoded_token(token: str, websocket: WebSocket):
+    try:
+        token_data = decode_token_for_participant(token)
+
+        if token_data is None:
+            await websocket.close()
+            raise CredentialsWSException()
+
+    except InvalidTokenError:
+        await websocket.close()
+        raise CredentialsWSException()
+
+    return token_data
+
+async def get_current_active_token_for_participant_ws(
+        websocket: WebSocket,
+) -> ParticipantTokenData:
+    vk_token = websocket.query_params.get("vkToken")
+    vk_info = websocket.query_params.get("vkInfo")
+    vk_email = websocket.query_params.get("vkEmail")
+    vk_phone = websocket.query_params.get("vkPhone")
+    anonym_token = websocket.query_params.get("anonymToken")
+    email_token = websocket.query_params.get("emailToken")
+
+    if vk_token and vk_info:
+        current_token = await get_current_vk_token_for_participant_ws(
+            websocket,
+            VkDataSchema(vk_token=vk_token, vk_info=vk_info,vk_email=vk_email,vk_phone=vk_phone)
+        )
+        user_info = await Repository.upsert_vk_user(
+            vk_user_id=current_token.vk_user_id,
+            first_name=current_token.first_name,
+            last_name=current_token.last_name,
+            email=current_token.email,
+            phone_number=current_token.phone_number
+        )
+        user_id = user_info.user_id
+    elif anonym_token:
+        user_id =  await get_decoded_token(anonym_token, websocket)
+    elif email_token:
+        user_id = await get_decoded_token(email_token, websocket)
+    else:
+        await websocket.close()
+        raise CredentialsWSException()
+
+    return ParticipantTokenData(user_id=user_id)
 
 
 @router.post("/login", response_model=Token)
@@ -140,6 +251,33 @@ async def login_for_access_token(
 
     return Token(access_token=access_token, token_type="bearer")
 
+@router.post("/email_login", response_model=Token)
+async def login_for_email(email: str):
+    email_user = await Repository.upsert_email_user(email=email)
+
+    access_token_expires = timedelta(minutes=60)
+    access_token = create_access_token(
+        data={
+            "sub": str(email_user.user_id),
+            "user_id": str(email_user.user_id),
+        },
+        expires_delta=access_token_expires,
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+@router.post("/anonym_login", response_model=Token)
+async def login_for_anonym():
+    anonym_user = await Repository.create_anonym_user()
+
+    access_token_expires = timedelta(minutes=60)
+    access_token = create_access_token(
+        data={
+            "sub": str(anonym_user.id),
+            "user_id": str(anonym_user.id),
+        },
+        expires_delta=access_token_expires,
+    )
+    return Token(access_token=access_token, token_type="bearer")
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(request: Request):
@@ -266,7 +404,8 @@ async def register(
         current_token: Annotated[TokenData, Depends(get_current_active_token)],
         email: str,
         role: AddOrganizationParticipantsEnum,
-) -> NameInOrganization:
+        background_tasks: BackgroundTasks,
+):
     email = await validate_receiver_email(email=email)
     if email is None:
         raise InvalidEmailException()
@@ -276,62 +415,99 @@ async def register(
 
     user_add_data = await Repository.get_user_by_email(email=email)
     if user_add_data is None:
-        password = generate_password()
-        password_hash = get_password_hash(password)
-        while True:
-            login = generate_login()
-            user_data = await Repository.create_organization_user(login=login, password_hash=password_hash, email=email)
-            if user_data is not None:
-                break
-
-        data = await Repository.add_organization_participant(
-            organization_id=current_token.organization_id,
-            user_id=user_data.id,
-            name=user_data.login,
-            role=UserRoleEnum(role.value)
+        token_expires = timedelta(minutes=60)
+        token = create_access_token(
+            data={
+                "sub": str(email),
+                "email": str(email),
+                "organization_id": str(current_token.organization_id),
+                "role": str(role.value),
+            },
+            expires_delta=token_expires,
         )
     else:
         user_participant_add_data = await Repository.get_participant(user_id=user_add_data.id)
         if user_participant_add_data is not None:
             raise CannotAddUserAnotherOrganizationException()
+        token_expires = timedelta(minutes=60)
+        token = create_access_token(
+            data={
+                "sub": str(email),
+                "email": str(email),
+                "organization_id": str(current_token.organization_id),
+                "role": str(role.value),
+            },
+            expires_delta=token_expires,
+        )
 
-        password = generate_password()
+    background_tasks.add_task(
+        send_email,
+        receiver_email=email,
+        subject="Добро пожаловать в Clik!",
+        body=f'Нажмите на эту ссылку, чтобы завершить регистрацию: {URL_FRONT}/first_reg?jwt={token}'
+    )
+    return
+
+@router.post("/register/confirm")
+async def register(
+        token: str,
+        login: str,
+        password: str,
+):
+    token_data = decode_token_for_register(token)
+    if token_data is None:
+        raise CredentialsException()
+
+    check_login = await Repository.check_login_exist(login=login)
+    if check_login:
+        raise InvalidLoginException()
+
+    len_login = len(login)
+    len_password = len(password)
+
+    if len_login < 3 or len_password > 30:
+        raise InvalidLoginException()
+
+    if len_password < 8 or len_password > 15:
+        raise InvalidPasswordException()
+
+    user_add_data = await Repository.get_user_by_email(email=token_data.email)
+    if user_add_data is None:
         password_hash = get_password_hash(password)
-        user_data = await Repository.change_user_password(user_id=user_add_data.id, password_hash=password_hash)
+        user_data = await Repository.create_organization_user(login=login, password_hash=password_hash, email=token_data.email)
         if user_data is None:
             raise InvalidEmailException()
 
         data = await Repository.add_organization_participant(
-            organization_id=current_token.organization_id,
+            organization_id=token_data.organization_id,
             user_id=user_data.id,
             name=user_data.login,
-            role=UserRoleEnum(role.value)
+            role=UserRoleEnum(token_data.role)
         )
-        login = user_add_data.login
-    try:
-        await send_email(
-            receiver_email=email,
-            subject="Welcome to Clik!",
-            body=f"Your login: {login}, password: {password}"
-        )
-    except Exception as e:
-        await Repository.delete_organization_participants(participant_id=data.id)
-        raise EmailSendException()
-    organization_data = await Repository_Organization.get_organization_info(
-        organization_id=current_token.organization_id
-    )
-    return NameInOrganization(
-        name=login,
-        username=login,
-        email=email,
-        organization_name=organization_data.organization_name,
-        role=UserRoleEnum(role.value)
-    )
 
+    else:
+        user_participant_add_data = await Repository.get_participant(user_id=user_add_data.id)
+        if user_participant_add_data is not None:
+            raise CannotAddUserAnotherOrganizationException()
+
+        password_hash = get_password_hash(password)
+        user_data = await Repository.change_user_password_and_login(user_id=user_add_data.id, password_hash=password_hash, login=login)
+        if user_data is None:
+            raise InvalidEmailException()
+
+        data = await Repository.add_organization_participant(
+            organization_id=token_data.organization_id,
+            user_id=user_data.id,
+            name=user_data.login,
+            role=UserRoleEnum(token_data.role)
+        )
+
+    return
 
 @router.post("/reset_password")
-async def register(
+async def reset_password(
         email: str,
+        background_tasks: BackgroundTasks,
 ) -> None:
     email = await validate_receiver_email(email=email)
     if email is None:
@@ -345,22 +521,50 @@ async def register(
     if user_participant_add_data is None:
         return
 
-    password = generate_password()
+    token_expires = timedelta(minutes=60)
+    token = create_access_token(
+        data={
+            "sub": str(email),
+            "user_id": str(user_add_data.id),
+            "login": str(user_add_data.login),
+            "email": str(email),
+        },
+        expires_delta=token_expires,
+    )
+
+    background_tasks.add_task(
+        send_email,
+        receiver_email=email,
+        subject="Clik сбросить пароль.",
+        body=f"Нажмите на эту ссылку, чтобы восстановить пароль: {URL_FRONT}/reset?jwt={token}"
+    )
+    return
+
+@router.post("/reset_password/confirm")
+async def register(
+        token: str,
+        password: str,
+):
+    user_id = decode_token_for_reset(token)
+    if user_id is None:
+        raise CredentialsException()
+
+    len_password = len(password)
+    if len_password < 8 or len_password > 15:
+        raise InvalidPasswordException()
+
     password_hash = get_password_hash(password)
-
-    user_data = await Repository.change_user_password(user_id=user_add_data.id, password_hash=password_hash)
+    user_data = await Repository.change_user_password(user_id=user_id, password_hash=password_hash)
     if user_data is None:
-        return
+        raise InvalidEmailException()
 
-    try:
-        await send_email(
-            receiver_email=email,
-            subject="Clik reset password!",
-            body=f"Your login: {user_add_data.login}, password: {password}"
-        )
-    except Exception as e:
-        raise EmailSendException()
+
+    user_participant_add_data = await Repository.get_participant(user_id=user_id)
+    if user_participant_add_data is None:
+        return
     await redis_dict.increment(user_participant_add_data.participant_id)
+    await Repository.revoke_all_sessions(user_id)
+
     return
 
 @router.get("/test/token_check/")

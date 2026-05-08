@@ -1,10 +1,17 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 import uuid
+import json
+import base64
+from collections import OrderedDict
+from hmac import HMAC
+from urllib.parse import urlencode, unquote
+import time
+import hashlib
 
 from auth.auth_config import SECRET_KEY, ALGORITHM, password_hash_algorithm, DUMMY_HASH, ACCESS_TOKEN_EXPIRE_MINUTES
 from auth.repository import Repository
-from auth.schemas import TokenData, AuthenticateUserSchema, RefreshTokenSchema
+from auth.schemas import TokenData, AuthenticateUserSchema, RefreshTokenSchema, TokenRegisterData
 
 
 def verify_password(plain_password, password_hash):
@@ -74,6 +81,94 @@ def decode_token(token: str):
                      token_id=token_id,
                      token_version=token_version
                      )
+
+def decode_token_for_register(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception as e:
+        print(e)
+        return None
+    email = payload.get("email")
+    organization_id = payload.get("organization_id")
+    role = payload.get("role")
+
+    if email is None:
+        return None
+
+    return TokenRegisterData(
+        email=email,
+        organization_id=int(organization_id),
+        role=role,
+    )
+
+def decode_token_for_reset(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception as e:
+        print(e)
+        return None
+    user_id = payload.get("user_id")
+
+    if user_id is None:
+        return None
+
+    return int(user_id)
+
+def decode_token_for_participant(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception as e:
+        print(e)
+        return None
+    user_id = payload.get("user_id")
+
+    return user_id
+
+
+def decode_base64(data: str) -> dict:
+    decoded_bytes = base64.b64decode(data)
+    decoded_str = decoded_bytes.decode('utf-8')
+    result_dict = json.loads(decoded_str)
+    return {str(k): str(v) for k, v in result_dict.items()}
+
+
+def is_valid_vk_token(*, query: dict, secret: str) -> bool:
+    """Check s Apps signature"""
+    vk_subset = OrderedDict(
+        sorted(x for x in query.items() if x[0][:3] == "vk_")
+    )
+    hash_code = base64.b64encode(
+        HMAC(secret.encode(), urlencode(vk_subset, doseq=True).encode(), hashlib.sha256).digest()
+    )
+
+    decoded_hash_code = hash_code.decode('utf-8')[:-1].replace('+', '-').replace('/', '_')
+    return query["sign"] == decoded_hash_code
+
+
+def is_valid_vk_ts(vk_ts: str, max_age_seconds: int = 3600) -> bool:
+    try:
+        ts = int(vk_ts)
+    except (ValueError, TypeError):
+        return False
+
+    now = int(time.time())
+    return now - ts <= max_age_seconds
+
+
+def generate_vk_sign(
+        *,
+        app_id: int | str,
+        api_secret: str,
+        vk_user_id: int | str,
+        field_name: str,
+        field_value: str,
+) -> str:
+    raw_string = f"{app_id}{api_secret}{vk_user_id}{field_name}{field_value}"
+    digest = hashlib.sha256(raw_string.encode("utf-8")).digest()
+    b64 = base64.b64encode(digest).decode("utf-8")
+    sign = b64.rstrip("=").replace("+", "-").replace("/", "_")
+
+    return sign
 
 
 async def create_refresh_token(user_id: int, refresh_token_expires: datetime) -> RefreshTokenSchema | None:

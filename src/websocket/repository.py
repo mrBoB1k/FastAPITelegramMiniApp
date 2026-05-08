@@ -1,12 +1,12 @@
-from sqlalchemy import select, exists, delete
+from sqlalchemy import select, exists, delete, update
+from sqlalchemy.sql import not_
 from database import new_session
 
 from config import URL_MINIO
 from models import *
 
 from websocket.schemas import InteractiveInfo, Question as QuestionSchema, CreateQuizParticipant, QuestionType, \
-    Percentage, AnswerGet, WinnerDiscussion, PercentageTypeText
-
+    Percentage, AnswerGet, WinnerDiscussion, PercentageTypeText, Moderation, ModerationData
 
 class Repository:
     @classmethod
@@ -21,7 +21,6 @@ class Repository:
                 )
             )
             return result.scalar()
-
 
     @classmethod
     async def get_interactive_info(cls, interactive_id: int) -> InteractiveInfo:
@@ -90,25 +89,141 @@ class Repository:
             ]
 
     @classmethod
-    async def register_quiz_participant(cls, data: CreateQuizParticipant) -> int:
+    async def register_quiz_participant(cls, interactive_id: int, user_id: int, total_time: int) -> QuizParticipant:
         async with new_session() as session:
             flag = await session.execute(
                 select(QuizParticipant)
-                .where(QuizParticipant.interactive_id == data.interactive_id, QuizParticipant.user_id == data.user_id)
+                .where(QuizParticipant.interactive_id == interactive_id, QuizParticipant.user_id == user_id)
             )
 
             flag = flag.scalar_one_or_none()
             if flag is None:
-                participant_dict = data.model_dump()
+                user_provider = await session.execute(
+                    select(User.provider)
+                    .where(User.id == user_id)
+                )
+                user_provider = user_provider.scalar_one_or_none()
 
-                participant = QuizParticipant(**participant_dict)
+                if user_provider == "vk":
+                    data_name = await session.execute(
+                        select(VkUser.first_name, VkUser.last_name)
+                        .where(VkUser.user_id == user_id)
+                    )
+                    data_name = data_name.first()
+
+                    if data_name:
+                        name = f"{data_name[0]} {data_name[1]}"
+                    else:
+                        name = "Аноним"
+                elif user_provider == "email":
+                    data_email = await session.execute(
+                        select(EmailUser.email)
+                        .where(EmailUser.user_id == user_id)
+                    )
+                    data_email = data_email.first()
+
+                    if data_email:
+                        name = f"{data_email[0]}"
+                    else:
+                        name = f"Аноним"
+                else:
+                    name = "Аноним"
+
+                participant = QuizParticipant(
+                    interactive_id=interactive_id,
+                    user_id=user_id,
+                    total_time=total_time,
+                    is_hidden=False,
+                    is_blocked=False,
+                    name=name,
+                )
                 session.add(participant)
 
                 await session.flush()
                 await session.commit()
-                return participant.id
+                return participant
             else:
-                return flag.id
+                return flag
+
+    @classmethod
+    async def set_participant_name(cls, participant_id: int, name: str) -> bool:
+        async with new_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(QuizParticipant)
+                    .where(
+                        QuizParticipant.id == participant_id
+                    )
+                    .values(name=name)
+                )
+
+                return result.rowcount > 0
+
+    @classmethod
+    async def toggle_participant_hidden(cls, participant_id: int, interactive_id: int) -> bool:
+        async with new_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(QuizParticipant)
+                    .where(QuizParticipant.id == participant_id, QuizParticipant.interactive_id == interactive_id)
+                    .values(is_hidden=not_(QuizParticipant.is_hidden))
+                    .returning(QuizParticipant.is_hidden)
+                )
+
+                updated_value = result.scalar_one_or_none()
+                return updated_value is not None
+
+    @classmethod
+    async def block_participant(cls, participant_id: int, interactive_id: int) -> bool:
+        async with new_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(QuizParticipant)
+                    .where(QuizParticipant.id == participant_id, QuizParticipant.interactive_id == interactive_id)
+                    .values(is_blocked=True)
+                )
+
+                return result.rowcount > 0
+
+    @classmethod
+    async def get_blocket_participant(cls, user_id: int, interactive_id: int) -> QuizParticipant | None:
+        async with new_session() as session:
+            result = await session.execute(
+                select(QuizParticipant)
+                .where(QuizParticipant.user_id == user_id, QuizParticipant.interactive_id == interactive_id,
+                       QuizParticipant.is_blocked == True)
+            )
+
+            result = result.scalar_one_or_none()
+            return result
+
+    @classmethod
+    async def get_moderation_data(cls, interactive_id: int) -> Moderation:
+        async with new_session() as session:
+            result = await session.execute(
+                select(
+                    QuizParticipant.name,
+                    QuizParticipant.id,
+                    QuizParticipant.is_hidden,
+                    QuizParticipant.is_blocked
+                )
+                .where(QuizParticipant.interactive_id == interactive_id)
+                .order_by(QuizParticipant.joined_at)  # сортируем по дате присоединения
+            )
+
+            participants = result.all()
+
+            moderation_data = [
+                ModerationData(
+                    username=participant.name or "",
+                    participant_id=participant.id,
+                    is_hidden=participant.is_hidden,
+                    is_blocked=participant.is_blocked
+                )
+                for participant in participants
+            ]
+
+            return Moderation(data=moderation_data)
 
     @classmethod
     async def check_register_quiz_participant(cls, data: CreateQuizParticipant) -> bool:
@@ -329,29 +444,39 @@ class Repository:
     @classmethod
     async def get_winners_discussion(cls, interactive_id: int) -> list[WinnerDiscussion]:
         async with new_session() as session:
-            # 1. Получаем всех участников викторины с их результатами за один запрос
+            # 1. Получаем всех участников викторины с их результатами
             stmt = (
                 select(
                     QuizParticipant.id,
                     QuizParticipant.user_id,
                     QuizParticipant.total_time,
-                    User.username,
+                    QuizParticipant.name,
+                    QuizParticipant.is_hidden,
+                    User.provider,
+                    VkUser.first_name,
+                    VkUser.last_name,
                     func.coalesce(func.sum(Question.score), 0).label('total_score')
                 )
                 .select_from(QuizParticipant)
                 .join(User, User.id == QuizParticipant.user_id)
+                .outerjoin(
+                    VkUser,
+                    VkUser.user_id == User.id
+                )
                 .outerjoin(
                     UserAnswer,
                     (UserAnswer.participant_id == QuizParticipant.id) &
                     (UserAnswer.is_correct == True)
                 )
                 .outerjoin(Question, Question.id == UserAnswer.question_id)
-                .where(QuizParticipant.interactive_id == interactive_id)
+                .where(QuizParticipant.interactive_id == interactive_id, QuizParticipant.is_blocked == False)
                 .group_by(
                     QuizParticipant.id,
                     QuizParticipant.user_id,
                     QuizParticipant.total_time,
-                    User.username
+                    User.provider,
+                    VkUser.first_name,
+                    VkUser.last_name
                 )
             )
 
@@ -361,16 +486,17 @@ class Repository:
             if not participants_data:
                 return []
 
-            # 2. Формируем список участников
-            participants_list = [
-                {
-                    "user_id": user_id,
-                    "username": username,
-                    "score": int(total_score),
-                    "total_time": total_time
-                }
-                for participant_id, user_id, total_time, username, total_score in participants_data
-            ]
+            # 2. Формируем список участников с правильным username
+            participants_list = []
+            for participant in participants_data:
+                participants_list.append({
+                    "user_id": participant.user_id,
+                    "username": participant.name if participant.name is not None else "",
+                    "score": int(participant.total_score),
+                    "total_time": participant.total_time,
+                    "participant_id": participant.id,
+                    "is_hidden": participant.is_hidden,
+                })
 
             # 3. Сортировка по score DESC, total_time ASC
             participants_list.sort(key=lambda x: (-x["score"], x["total_time"]))
@@ -381,7 +507,9 @@ class Repository:
                 WinnerDiscussion(
                     position=i + 1,
                     username=w["username"],
-                    score=w["score"]
+                    score=w["score"],
+                    participant_id=w["participant_id"],
+                    is_hidden=w["is_hidden"],
                 )
                 for i, w in enumerate(winners_list)
             ]
@@ -389,31 +517,41 @@ class Repository:
             return winners
 
     @classmethod
-    async def get_winners(cls, interactive_id: int):
+    async def get_winners(cls, interactive_id: int) -> list[dict]:
         async with new_session() as session:
-            # 1. Получаем всех участников викторины с их результатами за один запрос
+            # 1. Получаем всех участников викторины с их результатами
             stmt = (
                 select(
                     QuizParticipant.id,
                     QuizParticipant.user_id,
                     QuizParticipant.total_time,
-                    User.username,
+                    QuizParticipant.name,
+                    QuizParticipant.is_hidden,
+                    User.provider,
+                    VkUser.first_name,
+                    VkUser.last_name,
                     func.coalesce(func.sum(Question.score), 0).label('total_score')
                 )
                 .select_from(QuizParticipant)
                 .join(User, User.id == QuizParticipant.user_id)
+                .outerjoin(
+                    VkUser,
+                    VkUser.user_id == User.id
+                )
                 .outerjoin(
                     UserAnswer,
                     (UserAnswer.participant_id == QuizParticipant.id) &
                     (UserAnswer.is_correct == True)
                 )
                 .outerjoin(Question, Question.id == UserAnswer.question_id)
-                .where(QuizParticipant.interactive_id == interactive_id)
+                .where(QuizParticipant.interactive_id == interactive_id, QuizParticipant.is_blocked == False)
                 .group_by(
                     QuizParticipant.id,
                     QuizParticipant.user_id,
                     QuizParticipant.total_time,
-                    User.username
+                    User.provider,
+                    VkUser.first_name,
+                    VkUser.last_name
                 )
             )
 
@@ -423,30 +561,20 @@ class Repository:
             if not participants_data:
                 return []
 
-            # 2. Формируем список участников
-            participants_list = [
-                {
-                    "user_id": user_id,
-                    "username": username,
-                    "score": int(total_score),
-                    "total_time": total_time
-                }
-                for participant_id, user_id, total_time, username, total_score in participants_data
-            ]
+            # 2. Формируем список участников с правильным username
+            participants_list = []
+            for participant in participants_data:
+                participants_list.append({
+                    "user_id": participant.user_id,
+                    "username": participant.name if participant.name is not None else "",
+                    "score": int(participant.total_score),
+                    "total_time": participant.total_time,
+                    "participant_id": participant.id,
+                    "is_hidden": participant.is_hidden,
+                })
 
             # 3. Сортировка по score DESC, total_time ASC
             participants_list.sort(key=lambda x: (-x["score"], x["total_time"]))
-
-            # # 4. Формируем список победителей
-            # winners = [
-            #     Winner(
-            #         position=i + 1,
-            #         username=w["username"],
-            #         score=w["score"],
-            #         time=w["total_time"]
-            #     )
-            #     for i, w in enumerate(winners_list)
-            # ]
 
             return participants_list
 
@@ -455,7 +583,7 @@ class Repository:
         async with new_session() as session:
             result = await session.execute(
                 select(func.count().label('correct_count'))
-                .where(QuizParticipant.interactive_id == interactive_id)
+                .where(QuizParticipant.interactive_id == interactive_id, QuizParticipant.is_blocked == False)
             )
             count = result.scalar()
             return count

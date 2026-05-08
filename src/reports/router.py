@@ -20,7 +20,6 @@ from auth.schemas import TokenData
 from reports.schemas import ExportGet, ExportEnum, ReturnUrl
 from reports.repository import Repository
 
-
 router = APIRouter(
     prefix="/api/reports",
     tags=["/api/reports"]
@@ -33,7 +32,8 @@ async def get_export(
         input_data: ExportGet
 ) -> ReturnUrl:
     for interactive_id in input_data.interactive_id:
-        flag = await Repository.check_user_conducted_interactive(organization_id=current_token.organization_id, interactive_id=interactive_id.id)
+        flag = await Repository.check_user_conducted_interactive(organization_id=current_token.organization_id,
+                                                                 interactive_id=interactive_id.id)
         if not flag:
             raise InteractiveNotConductedException()
 
@@ -44,13 +44,14 @@ async def get_export(
         ws = wb.active
         ws.title = "Analytics Report"
 
-        # Заголовки
         headers = [
             "id_интерактива", "Название интерактива", "Дата проведения",
             "Общее количество участников", "Общее количество вопросов",
             "Целевая аудитория", "Место проведения", "ФИО ведущего",
-            "tg_id", "tg_username", "ФИО участника", "Количество правильных ответов",
-            "Общее время на ответа", "Общее количество баллов"
+            "Способ подключения", "vk_id", "Имя", "Фамилия", "Почта", "Номер телефона",
+            "Введенное имя пользователя", "Кикнут с интерактива?", "Скрыто имя на интерактиве?",
+            "Количество правильных ответов", "Общее время на ответа",
+            "Общее количество баллов"
         ]
         ws.append(headers)
 
@@ -67,9 +68,18 @@ async def get_export(
                     item.target_audience,
                     item.location,
                     item.responsible_full_name,
-                    item.telegram_id,
-                    item.username,
-                    item.full_name,
+
+                    item.provider,
+                    item.vk_id,
+                    item.first_name,
+                    item.last_name,
+                    item.email,
+                    item.phone_number,
+
+                    item.name,
+                    item.is_blocked,
+                    item.is_hidden,
+
                     item.correct_answers_count,
                     item.total_time,
                     item.total_score,
@@ -138,7 +148,7 @@ async def get_export(
                 cell.font = bold_font
 
             # 2. Вопросы и ответы (строка 11-14)
-            current_col = 8  # Начинаем с колонки H
+            current_col = 14  # Начинаем с колонки J
 
             for question in sorted(data.header.question, key=lambda q: q.position):
                 if question.type == InteractiveType.one or question.type == InteractiveType.many:
@@ -233,13 +243,16 @@ async def get_export(
                     current_col += answer_count + 1  # Сдвигаем на нужное количество колонок
 
             # 2.2 Общие показатели участника (14 строчка с E по G)
-            cell = ws.cell(row=14, column=5, value=f"Общие показатели участника")
+            cell = ws.cell(row=14, column=11, value=f"Общие показатели участника")
             cell.border = Border(top=medium_side, left=medium_side, right=medium_side, bottom=medium_side)
-            ws.merge_cells(start_row=14, start_column=5, end_row=14, end_column=7)
+            ws.merge_cells(start_row=14, start_column=11, end_row=14, end_column=13)
 
             # 3. Заголовки таблицы участников (строка 15)
-            headers = ["количество участников", "telegram_id", "telegram_username", "ФИО участника",
-                       "Количество верных ответов", "Общее время на ответы", "Общее количество баллов"]
+            headers = [
+                "Количество участников", "Способ подключения", "vk_id", "Имя", "Фамилия", "Почта", "Номер телефона",
+                "Введенное имя пользователя", "Кикнут с интерактива?", "Скрыто имя на интерактиве?",
+                "Количество верных ответов", "Общее время на ответы", "Общее количество баллов"
+            ]
             for col, header in enumerate(headers, start=1):
                 cell = ws.cell(row=15, column=col, value=header)
                 if header == "Количество верных ответов":
@@ -259,38 +272,70 @@ async def get_export(
                 if i == count_participant:
                     cell = ws.cell(row=row, column=1, value=i)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=2, value=participant.telegram_id)
+
+                    cell = ws.cell(row=row, column=2, value=participant.provider)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=3, value=participant.username)
+
+                    cell = ws.cell(row=row, column=3, value=participant.vk_id)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=4, value=participant.full_name)
+                    cell = ws.cell(row=row, column=4, value=participant.first_name)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=5,
+                    cell = ws.cell(row=row, column=5, value=participant.last_name)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+                    cell = ws.cell(row=row, column=6, value=participant.email)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+                    cell = ws.cell(row=row, column=7, value=participant.phone_number)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+
+                    cell = ws.cell(row=row, column=8, value=participant.name)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+                    cell = ws.cell(row=row, column=9, value=participant.is_blocked)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+                    cell = ws.cell(row=row, column=10, value=participant.is_hidden)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
+
+                    cell = ws.cell(row=row, column=11,
                                    value=f"{participant.correct_answers_count}/{len(data.header.question)}")
                     cell.border = Border(top=thin_side, left=medium_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=6, value=f"{participant.total_time}")
+                    cell = ws.cell(row=row, column=12, value=f"{participant.total_time}")
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=medium_side)
-                    cell = ws.cell(row=row, column=7, value=f"{participant.total_score}")
+                    cell = ws.cell(row=row, column=13, value=f"{participant.total_score}")
                     cell.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=medium_side)
                 else:
                     cell = ws.cell(row=row, column=1, value=i)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=2, value=participant.telegram_id)
+
+                    cell = ws.cell(row=row, column=2, value=participant.provider)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=3, value=participant.username)
+
+                    cell = ws.cell(row=row, column=3, value=participant.vk_id)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=4, value=participant.full_name)
+                    cell = ws.cell(row=row, column=4, value=participant.first_name)
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=5,
+                    cell = ws.cell(row=row, column=5, value=participant.last_name)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    cell = ws.cell(row=row, column=6, value=participant.email)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    cell = ws.cell(row=row, column=7, value=participant.phone_number)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+
+                    cell = ws.cell(row=row, column=8, value=participant.name)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    cell = ws.cell(row=row, column=9, value=participant.is_blocked)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+                    cell = ws.cell(row=row, column=10, value=participant.is_hidden)
+                    cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
+
+                    cell = ws.cell(row=row, column=11,
                                    value=f"{participant.correct_answers_count}/{len(data.header.question)}")
                     cell.border = Border(top=thin_side, left=medium_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=6, value=f"{participant.total_time}")
+                    cell = ws.cell(row=row, column=12, value=f"{participant.total_time}")
                     cell.border = Border(top=thin_side, left=thin_side, right=thin_side, bottom=thin_side)
-                    cell = ws.cell(row=row, column=7, value=f"{participant.total_score}")
+                    cell = ws.cell(row=row, column=13, value=f"{participant.total_score}")
                     cell.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=thin_side)
 
                 # Ответы участника
-                current_col = 8
+                current_col = 14
                 for question in sorted(data.header.question, key=lambda q: q.position):
                     if question.type == InteractiveType.one:
                         answer_count = len(question.answers)
@@ -407,23 +452,23 @@ async def get_export(
 
             # 5. Подсчет ответивших (строка после последнего участника)
             stats_row = 15 + len(data.body) + 1 + 1
-            cell = ws.cell(row=stats_row, column=5, value="Общие показатели вопроса")
+            cell = ws.cell(row=stats_row, column=11, value="Общие показатели вопроса")
             cell.font = bold_font
             cell.fill = statistic_fill
             cell.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=thin_side)
-            ws.merge_cells(start_row=stats_row, start_column=5, end_row=stats_row, end_column=7)
+            ws.merge_cells(start_row=stats_row, start_column=11, end_row=stats_row, end_column=13)
 
-            cell = ws.cell(row=stats_row + 1, column=5, value="Количество ответивших")
+            cell = ws.cell(row=stats_row + 1, column=11, value="Количество ответивших")
             cell.fill = statistic_fill
             cell.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=thin_side)
-            ws.merge_cells(start_row=stats_row + 1, start_column=5, end_row=stats_row + 1, end_column=7)
+            ws.merge_cells(start_row=stats_row + 1, start_column=11, end_row=stats_row + 1, end_column=13)
 
-            cell = ws.cell(row=stats_row + 2, column=5, value="Среднее время ответа на вопрос")
+            cell = ws.cell(row=stats_row + 2, column=11, value="Среднее время ответа на вопрос")
             cell.fill = statistic_fill
             cell.border = Border(top=thin_side, left=thin_side, right=medium_side, bottom=thin_side)
-            ws.merge_cells(start_row=stats_row + 2, start_column=5, end_row=stats_row + 2, end_column=7)
+            ws.merge_cells(start_row=stats_row + 2, start_column=11, end_row=stats_row + 2, end_column=13)
 
-            current_col = 8
+            current_col = 14
             for question in sorted(data.header.question, key=lambda q: q.position):
                 if question.type == InteractiveType.one or question.type == InteractiveType.many:
                     answer_count = len(question.answers)
@@ -551,7 +596,6 @@ async def get_export(
         await Repository_broadcasts.save_image(saved_file)
         url = URL_MINIO
         return ReturnUrl(url=f"{url}{bucket}/{saved_file.unique_filename}", name=filename)
-
 
 
 def smart_translit(text):

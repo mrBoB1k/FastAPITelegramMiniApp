@@ -1,6 +1,7 @@
 import pytz
 from sqlalchemy import select
 from database import new_session
+from exceptions import InteractiveNotConductedException
 from models import *
 from datetime import datetime
 from reports.schemas import ExportForAnalise, ExportForLeaderData, ExportForLeaderHeader, ExportForLeaderBody, \
@@ -31,11 +32,11 @@ class Repository:
             # 1. Получаем базовую информацию об интерактиве
             interactive = await session.get(Interactive, interactive_id)
             if not interactive:
-                raise HTTPException(status_code=404, detail=f"Интерактив с ID {interactive_id} не найден")
+                raise InteractiveNotConductedException()
 
             responsible_full_name = await session.get(OrganizationParticipant, interactive.created_by_id)
             if not responsible_full_name:
-                raise HTTPException(status_code=404, detail="Не найден создатель интерактива")
+                raise InteractiveNotConductedException()
             responsible_full_name = responsible_full_name.name
 
             # 2. Получаем всех участников интерактива
@@ -56,6 +57,41 @@ class Repository:
                 user = await session.get(User, participant.user_id)
                 if not user:
                     continue
+
+                vk_id = None
+                first_name = None
+                last_name = None
+                email = None
+                phone_number = None
+
+                if user.provider == "vk":
+                    vk_user = await session.execute(
+                        select(VkUser)
+                        .where(
+                            VkUser.user_id == user.id
+                        )
+                    )
+                    existing_vk_user = vk_user.scalar_one_or_none()
+                    if not existing_vk_user:
+                        continue
+
+                    vk_id = existing_vk_user.vk_user_id
+                    first_name = existing_vk_user.first_name
+                    last_name = existing_vk_user.last_name
+                    email = existing_vk_user.email if existing_vk_user.email is not None else ""
+                    phone_number = existing_vk_user.phone_number if existing_vk_user.phone_number is not None else ""
+                elif user.provider == "email":
+                    email_user = await session.execute(
+                        select(EmailUser)
+                        .where(
+                            EmailUser.user_id == user.id
+                        )
+                    )
+                    email_user = email_user.scalar_one_or_none()
+                    if not email_user:
+                        continue
+
+                    email = email_user.email
 
                 # Считаем количество правильных ответов для участника
                 correct_answers_count = await session.scalar(
@@ -93,9 +129,19 @@ class Repository:
                     target_audience=interactive.target_audience,
                     location=interactive.location,
                     responsible_full_name=responsible_full_name,
-                    telegram_id=user.telegram_id,
-                    username=user.username,
-                    full_name=f"{user.first_name} {user.last_name}" if user.last_name else user.first_name,
+
+                    provider=user.provider,
+
+                    vk_id=vk_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone_number=phone_number,
+
+                    name=participant.name,
+                    is_hidden=participant.is_hidden,
+                    is_blocked=participant.is_blocked,
+
                     correct_answers_count=correct_answers_count,
                     total_time=total_time,
                     total_score=total_score,
@@ -142,11 +188,11 @@ class Repository:
             # 1. Получаем информацию об интерактиве
             interactive = await session.get(Interactive, interactive_id)
             if not interactive:
-                raise ValueError(f"Интерактив с ID {interactive_id} не найден")
+                raise InteractiveNotConductedException()
 
             responsible_full_name = await session.get(OrganizationParticipant, interactive.created_by_id)
             if not responsible_full_name:
-                raise HTTPException(status_code=404, detail="Не найден создатель интерактива")
+                raise InteractiveNotConductedException()
             responsible_full_name = responsible_full_name.name
 
             # 2. Получаем всех участников
@@ -211,6 +257,41 @@ class Repository:
                 if not user:
                     continue
 
+                vk_id = None
+                first_name = None
+                last_name = None
+                email = None
+                phone_number = None
+
+                if user.provider == "vk":
+                    vk_user = await session.execute(
+                        select(VkUser)
+                        .where(
+                            VkUser.user_id == user.id
+                        )
+                    )
+                    existing_vk_user = vk_user.scalar_one_or_none()
+                    if not existing_vk_user:
+                        continue
+
+                    vk_id = existing_vk_user.vk_user_id
+                    first_name = existing_vk_user.first_name
+                    last_name = existing_vk_user.last_name
+                    email = existing_vk_user.email if existing_vk_user.email is not None else ""
+                    phone_number = existing_vk_user.phone_number if existing_vk_user.phone_number is not None else ""
+                elif user.provider == "email":
+                    email_user = await session.execute(
+                        select(EmailUser)
+                        .where(
+                            EmailUser.user_id == user.id
+                        )
+                    )
+                    email_user = email_user.scalar_one_or_none()
+                    if not email_user:
+                        continue
+
+                    email = email_user.email
+
                 # Получаем все ответы участника
                 user_answers_result = await session.execute(
                     select(UserAnswer)
@@ -243,10 +324,6 @@ class Repository:
                         )
                     )
 
-                # Формируем полное имя
-                full_name = user.first_name
-                if user.last_name:
-                    full_name += f" {user.last_name}"
 
                 # Получаем время ответов участника
                 total_time = f"{participant.total_time // 60}:{participant.total_time % 60:02d}"
@@ -267,12 +344,22 @@ class Repository:
 
                 body_data.append(
                     ExportForLeaderBody(
-                        telegram_id=user.telegram_id,
-                        username=user.username,
-                        full_name=full_name,
+                        provider=user.provider,
+
+                        vk_id=vk_id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        email=email,
+                        phone_number=phone_number,
+
+                        name=participant.name,
+                        is_blocked=participant.is_blocked,
+                        is_hidden=participant.is_hidden,
+
                         correct_answers_count=correct_answers,
                         total_time=total_time,
                         total_score=total_score,
+
                         answers=participant_answers
                     )
                 )
